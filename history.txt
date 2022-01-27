@@ -1,0 +1,6 @@
+#V2
+use use common::prelude::*;
+/d
+/dt
+\\dt
+CREATE TABLE test (a TIMESTAMP, b
