@@ -25,6 +25,7 @@ pub(crate) struct Record {
 }
 
 pub(crate) struct Header {
+    ptrEndofFreeSpace: usize,
     vecOfRecords: Vec<Record>,
     deletedRecords: Vec<SlotId>,
     PageID: PageId,
@@ -37,6 +38,7 @@ impl Page {
     ///
     pub fn new(page_id: PageId) -> Self {
         let newHeader = Header {
+            ptrEndofFreeSpace: PAGE_SIZE,
             vecOfRecords: Vec::new(),
             deletedRecords: Vec::new(),
             PageID: page_id,
@@ -70,21 +72,14 @@ impl Page {
 
     pub fn add_value(&mut self, bytes: &[u8]) -> Option<SlotId> {
         // check if there is enough space in page for new record
-        if self.get_largest_free_contiguous_space() >= bytes.read_be_usize() {
-            // reuse a deleted SlotID if it exists
-            if self.header.deletedRecords.is_empty() {
-                // check existing vec of slotIDs and give new record next big slotID
-                let lastSlotID =
-                    self.header.vecOfRecords.as_slice()[self.header.vecOfRecords.len() - 1].slotID;
-                let newSlotID = lastSlotID + 1;
-            } else {
-                // reuse the first free SlotID for new record from deleted SlotIDs
-                let newSlotID = self.header.deletedRecords.remove(0);
-            }
-            // find beg_location of new record
-            let newBegLoc = self.get_largest_free_contiguous_space();
+        if self.get_largest_free_contiguous_space() >= bytes.len() {
+            // reuse a deleted SlotID if it exists or create new one of not
+            let newSlotID = self.return_valid_new_SlotID();
+            // find beg_location of new record as pointing to end of largest free contig space on page
+            let newBegLoc = self.header.ptrEndofFreeSpace;
+            // let newBegLoc = self.get_largest_free_contiguous_space();
             // calculate end_location of new record
-            let newEndLoc = newBegLoc + bytes.read_be_usize();
+            let newEndLoc = newBegLoc - bytes.len();
             // create new record
             let newRecord = Record {
                 slotID: newSlotID,
@@ -93,8 +88,10 @@ impl Page {
             };
             // push new record into vecOfRecords in page header
             self.header.vecOfRecords.push(newRecord);
+            // update ptr to end of free space in header
+            self.header.ptrEndofFreeSpace = newEndLoc;
             // copy new record data into the page data at the beg_loc
-            self.data[newBegLoc].clone_from_slice(&bytes);
+            self.data[newEndLoc..newBegLoc].clone_from_slice(&bytes);
             // return the SlotID for the new record
             Some(newSlotID)
         } else {
@@ -181,6 +178,22 @@ impl Page {
         let (int_bytes, rest) = input.split_at(std::mem::size_of::<usize>());
         *input = rest;
         usize::from_be_bytes(int_bytes.try_into().unwrap())
+    }
+
+    /// Utility function to return the new SlotID for a valid new record
+    pub fn return_valid_new_SlotID(&mut self) -> SlotId {
+        if self.header.deletedRecords.is_empty() {
+            // check existing vec of slotIDs and give new record next big slotID or create new slotID
+            if self.header.vecOfRecords.is_empty() {
+                return 0;
+            }
+            let lastSlotID =
+                self.header.vecOfRecords.as_slice()[self.header.vecOfRecords.len() - 1].slotID;
+            lastSlotID + 1
+        } else {
+            // reuse the first free SlotID for new record from deleted SlotIDs
+            self.header.deletedRecords.remove(0)
+        }
     }
 }
 
