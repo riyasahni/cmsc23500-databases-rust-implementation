@@ -1,8 +1,9 @@
 use common::ids::{PageId, SlotId};
 use common::PAGE_SIZE;
+use log::Log;
 use std::convert::TryInto;
 use std::mem;
-
+use std::sync::mpsc::Receiver;
 
 /// The struct for a page. Note this can hold more elements/meta data when created,
 /// but it must be able to be packed/serialized/marshalled into the data array of size
@@ -14,20 +15,47 @@ use std::mem;
 pub(crate) struct Page {
     /// The data for data
     data: [u8; PAGE_SIZE],
+    header: Header,
+}
+
+pub(crate) struct Record {
+    pub slotID: SlotId,
+    pub end_location: usize,
+    pub beg_location: usize,
+}
+
+pub(crate) struct Header {
+    vecOfRecords: Vec<Record>,
+    deletedRecords: Vec<SlotId>,
+    PageID: PageId,
 }
 
 /// The functions required for page
 impl Page {
     /// Create a new page
+    /// struct for header
+    ///
     pub fn new(page_id: PageId) -> Self {
-        panic!("TODO milestone pg");
+        let newHeader = Header {
+            vecOfRecords: Vec::new(),
+            deletedRecords: Vec::new(),
+            PageID: page_id,
+        };
+
+        let newPage = Page {
+            data: [0; PAGE_SIZE],
+            header: newHeader,
+        };
+
+        newPage
+        //    panic!("TODO milestone pg");
     }
 
     /// Return the page id for a page
     pub fn get_page_id(&self) -> PageId {
-        panic!("TODO milestone pg");
+        let pageId = self.header.PageID;
+        pageId
     }
-
 
     /// Attempts to add a new value to this page if there is space available.
     /// Returns Some(SlotId) if it was inserted or None if there was not enough space.
@@ -41,7 +69,37 @@ impl Page {
     /// self.data[X..y].clone_from_slice(&bytes);
 
     pub fn add_value(&mut self, bytes: &[u8]) -> Option<SlotId> {
-        panic!("TODO milestone pg");
+        // check if there is enough space in page for new record
+        if self.get_largest_free_contiguous_space() >= bytes.read_be_usize() {
+            // reuse a deleted SlotID if it exists
+            if self.header.deletedRecords.is_empty() {
+                // check existing vec of slotIDs and give new record next big slotID
+                let lastSlotID =
+                    self.header.vecOfRecords.as_slice()[self.header.vecOfRecords.len() - 1].slotID;
+                let newSlotID = lastSlotID + 1;
+            } else {
+                // reuse the first free SlotID for new record from deleted SlotIDs
+                let newSlotID = self.header.deletedRecords.remove(0);
+            }
+            // find beg_location of new record
+            let newBegLoc = self.get_largest_free_contiguous_space();
+            // calculate end_location of new record
+            let newEndLoc = newBegLoc + bytes.read_be_usize();
+            // create new record
+            let newRecord = Record {
+                slotID: newSlotID,
+                end_location: newEndLoc,
+                beg_location: newBegLoc,
+            };
+            // push new record into vecOfRecords in page header
+            self.header.vecOfRecords.push(newRecord);
+            // copy new record data into the page data at the beg_loc
+            self.data[newBegLoc].clone_from_slice(&bytes);
+            // return the SlotID for the new record
+            Some(newSlotID)
+        } else {
+            None
+        }
     }
 
     /// Return the bytes for the slotId. If the slotId is not valid then return None
@@ -78,14 +136,51 @@ impl Page {
     /// Will be used by tests. Optional for you to use in your code
     #[allow(dead_code)]
     pub(crate) fn get_header_size(&self) -> usize {
-        panic!("TODO milestone pg");
+        //Header has 8 bytes for general page metadata and 6 bytes per value/entry/slot stored.
+        //let header_size = 8+6*num_of_elements_on_page;
+        let headerSize = 8 + 6 * self.header.vecOfRecords.len();
+        headerSize
+        //panic!("TODO milestone pg");
     }
-
     /// A utility function to determine the largest block of free space in the page.
     /// Will be used by tests. Optional for you to use in your code
     #[allow(dead_code)]
     pub(crate) fn get_largest_free_contiguous_space(&self) -> usize {
-        panic!("TODO milestone pg");
+        let mut maxContigSpaceRecords = 0;
+        let mut ptr_max_contig_space = PAGE_SIZE;
+        // Find max Contig Space between records
+        // Set pointer to the bottom of page
+        let mut botLoc = PAGE_SIZE;
+        for record in self.header.vecOfRecords.iter() {
+            // set pointer to the beginning of current record
+            let mut topLoc = record.beg_location;
+            // compare empty space between records/page and first record with
+            // current max empty space
+            if (botLoc - topLoc) > maxContigSpaceRecords {
+                maxContigSpaceRecords = botLoc - topLoc;
+                // update pointer to beginning of largest contig space location
+                ptr_max_contig_space = topLoc;
+                botLoc = record.end_location;
+            } else {
+                botLoc = record.end_location;
+            }
+        }
+        //compare the max contig values and return the largest
+        let topLoc = self.get_header_size();
+        if (botLoc - topLoc) > maxContigSpaceRecords {
+            maxContigSpaceRecords = botLoc - topLoc;
+            ptr_max_contig_space = self.get_header_size();
+        }
+        maxContigSpaceRecords
+    }
+
+    /// Utility function from https://doc.rust-lang.org/std/primitive.usize.html to
+    /// convert &[u8] type to usize.
+    #[allow(dead_code)]
+    pub fn read_be_usize(input: &mut &[u8]) -> usize {
+        let (int_bytes, rest) = input.split_at(std::mem::size_of::<usize>());
+        *input = rest;
+        usize::from_be_bytes(int_bytes.try_into().unwrap())
     }
 }
 
@@ -94,7 +189,6 @@ impl Page {
 /// See https://stackoverflow.com/questions/30218886/how-to-implement-iterator-and-intoiterator-for-a-simple-struct
 pub struct PageIter {
     //TODO milestone pg
-     
 }
 
 /// The implementation of the (consuming) page iterator.
