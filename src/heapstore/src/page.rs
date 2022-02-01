@@ -1,6 +1,7 @@
 use common::ids::{PageId, SlotId};
 use common::PAGE_SIZE;
 use log::Log;
+use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::mem;
 use std::sync::mpsc::Receiver;
@@ -33,9 +34,7 @@ pub(crate) struct Header {
 
 /// The functions required for page
 impl Page {
-    /// Create a new page
-    /// struct for header
-    ///
+    /// Create a new page and a struct for header
     pub fn new(page_id: PageId) -> Self {
         let newHeader = Header {
             ptrEndofFreeSpace: PAGE_SIZE,
@@ -101,7 +100,28 @@ impl Page {
 
     /// Return the bytes for the slotId. If the slotId is not valid then return None
     pub fn get_value(&self, slot_id: SlotId) -> Option<Vec<u8>> {
-        panic!("TODO milestone pg");
+        // create vector to store the record's bytes into
+        let mut bytesVec = Vec::new();
+        // go through vector of records in header and check if slot_id is valid
+        for record in &self.header.vecOfRecords {
+            // exit loop if slot_id exists
+            if record.slotID == slot_id {
+                break;
+            }
+            // return None if slot_id is not valid
+            return None;
+        }
+        // extract the record's beginning & end locations in the page
+        let record = self.return_record_with_given_slotid(slot_id);
+        let recordBegLoc = record.beg_location;
+        let recordEndLoc = record.end_location;
+        // copy each bit from page into vector
+        for bit in (recordEndLoc..recordBegLoc).rev() {
+            bytesVec.push(self.data[bit]);
+        }
+
+        Some(bytesVec)
+        // panic!("TODO milestone pg");
     }
 
     /// Delete the bytes/slot for the slotId. If the slotId is not valid then return None
@@ -133,11 +153,9 @@ impl Page {
     /// Will be used by tests. Optional for you to use in your code
     #[allow(dead_code)]
     pub(crate) fn get_header_size(&self) -> usize {
-        //Header has 8 bytes for general page metadata and 6 bytes per value/entry/slot stored.
         //let header_size = 8+6*num_of_elements_on_page;
         let headerSize = 8 + 6 * self.header.vecOfRecords.len();
         headerSize
-        //panic!("TODO milestone pg");
     }
     /// A utility function to determine the largest block of free space in the page.
     /// Will be used by tests. Optional for you to use in your code
@@ -171,15 +189,6 @@ impl Page {
         maxContigSpaceRecords
     }
 
-    /// Utility function from https://doc.rust-lang.org/std/primitive.usize.html to
-    /// convert &[u8] type to usize.
-    #[allow(dead_code)]
-    pub fn read_be_usize(input: &mut &[u8]) -> usize {
-        let (int_bytes, rest) = input.split_at(std::mem::size_of::<usize>());
-        *input = rest;
-        usize::from_be_bytes(int_bytes.try_into().unwrap())
-    }
-
     /// Utility function to return the new SlotID for a valid new record
     pub fn return_valid_new_SlotID(&mut self) -> SlotId {
         if self.header.deletedRecords.is_empty() {
@@ -194,6 +203,16 @@ impl Page {
             // reuse the first free SlotID for new record from deleted SlotIDs
             self.header.deletedRecords.remove(0)
         }
+    }
+
+    /// Utility function to iterate through vector of records and return record with corresponding slot_id
+    pub fn return_record_with_given_slotid(&self, slot_id: SlotId) -> &Record {
+        for record in &self.header.vecOfRecords {
+            if record.slotID == slot_id {
+                return record;
+            }
+        }
+        panic!("Invalid slot id!");
     }
 }
 
