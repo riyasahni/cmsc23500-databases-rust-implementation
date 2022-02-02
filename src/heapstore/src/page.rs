@@ -28,7 +28,7 @@ pub(crate) struct Record {
 pub(crate) struct Header {
     ptrEndofFreeSpace: usize,
     vecOfRecords: Vec<Record>,
-    deletedRecords: Vec<SlotId>,
+    deletedSlotIDs: Vec<SlotId>,
     PageID: PageId,
 }
 
@@ -39,7 +39,7 @@ impl Page {
         let newHeader = Header {
             ptrEndofFreeSpace: PAGE_SIZE,
             vecOfRecords: Vec::new(),
-            deletedRecords: Vec::new(),
+            deletedSlotIDs: Vec::new(),
             PageID: page_id,
         };
 
@@ -127,7 +127,32 @@ impl Page {
     /// Delete the bytes/slot for the slotId. If the slotId is not valid then return None
     /// HINT: Return Some(()) for a valid delete
     pub fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
-        panic!("TODO milestone pg");
+        // go through vector of records in header and check if slot_id is valid
+        let mut slotIdIsValid = false;
+        for record in &self.header.vecOfRecords {
+            // check if slot_id exists
+            if record.slotID == slot_id {
+                slotIdIsValid = true;
+                // update ptr to end of free space if ptr was pointing to deleted record
+                if self.header.ptrEndofFreeSpace == record.end_location {
+                    self.header.ptrEndofFreeSpace = record.beg_location;
+                }
+                // add slotId of deleted record to vector of deleted slotIDs
+                let deletedRecordSlotID = record.slotID;
+                self.header.deletedSlotIDs.push(deletedRecordSlotID);
+                // sort vector of deleted slotIDs in ascending order
+                self.header.deletedSlotIDs.sort();
+            }
+        }
+        // return None if slot_id is not valid
+        if slotIdIsValid {
+            // remove deleted record from vector of records in header (the slotID is the index)
+            self.header.vecOfRecords.remove(slot_id.into());
+            Some(())
+        } else {
+            None
+        }
+        //   panic!("TODO milestone pg");
     }
 
     /// Create a new page from the byte array.
@@ -191,7 +216,7 @@ impl Page {
 
     /// Utility function to return the new SlotID for a valid new record
     pub fn return_valid_new_SlotID(&mut self) -> SlotId {
-        if self.header.deletedRecords.is_empty() {
+        if self.header.deletedSlotIDs.is_empty() {
             // check existing vec of slotIDs and give new record next big slotID or create new slotID
             if self.header.vecOfRecords.is_empty() {
                 return 0;
@@ -201,7 +226,7 @@ impl Page {
             lastSlotID + 1
         } else {
             // reuse the first free SlotID for new record from deleted SlotIDs
-            self.header.deletedRecords.remove(0)
+            self.header.deletedSlotIDs.remove(0)
         }
     }
 
