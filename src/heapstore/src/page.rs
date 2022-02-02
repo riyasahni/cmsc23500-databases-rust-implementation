@@ -151,8 +151,8 @@ impl Page {
         // return None if slot_id is not valid
         if slotIdIsValid {
             // remove deleted record from vector of records in header
-            // keep track of index of record
             let mut recordIndex = self.return_index_of_record_with_valid_slotid(slot_id);
+            // preserve the order of vector of records in header
             self.header.vecOfRecords.remove(recordIndex);
             Some(())
         } else {
