@@ -74,11 +74,12 @@ impl Page {
         if self.get_largest_free_contiguous_space() >= bytes.len() {
             // reuse a deleted SlotID if it exists or create new one of not
             let newSlotID = self.return_valid_new_SlotID();
-            // find beg_location of new record as pointing to end of largest free contig space on page
-            let newBegLoc = self.header.ptrEndofFreeSpace;
+            // find beg_location of new record as pointing to bytes.len before
+            // the largest free contig space on page
+            let newBegLoc = self.header.ptrEndofFreeSpace - bytes.len();
             // let newBegLoc = self.get_largest_free_contiguous_space();
-            // calculate end_location of new record
-            let newEndLoc = newBegLoc - bytes.len();
+            // set end_location of new record as at ptr to the old "end of free space"
+            let newEndLoc = self.header.ptrEndofFreeSpace;
             // create new record
             let newRecord = Record {
                 slotID: newSlotID,
@@ -88,9 +89,9 @@ impl Page {
             // push new record into vecOfRecords in page header
             self.header.vecOfRecords.push(newRecord);
             // update ptr to end of free space in header
-            self.header.ptrEndofFreeSpace = newEndLoc;
+            self.header.ptrEndofFreeSpace = newBegLoc;
             // copy new record data into the page data at the beg_loc
-            self.data[newEndLoc..newBegLoc].clone_from_slice(&bytes);
+            self.data[newBegLoc..newEndLoc].clone_from_slice(&bytes);
             // return the SlotID for the new record
             Some(newSlotID)
         } else {
@@ -102,13 +103,17 @@ impl Page {
     pub fn get_value(&self, slot_id: SlotId) -> Option<Vec<u8>> {
         // create vector to store the record's bytes into
         let mut bytesVec = Vec::new();
+        // create boolean to signal if slotID is valid
+        let mut checkValid = false;
         // go through vector of records in header and check if slot_id is valid
         for record in &self.header.vecOfRecords {
-            // exit loop if slot_id exists
+            // set checkValid to true if slot_id exists
             if record.slotID == slot_id {
-                break;
+                checkValid = true;
             }
-            // return None if slot_id is not valid
+        }
+        // return None if slotID is not valid
+        if !checkValid {
             return None;
         }
         // extract the record's beginning & end locations in the page
@@ -116,10 +121,9 @@ impl Page {
         let recordBegLoc = record.beg_location;
         let recordEndLoc = record.end_location;
         // copy each bit from page into vector
-        for bit in (recordEndLoc..recordBegLoc).rev() {
+        for bit in recordBegLoc..recordEndLoc {
             bytesVec.push(self.data[bit]);
         }
-
         Some(bytesVec)
         // panic!("TODO milestone pg");
     }
@@ -187,29 +191,26 @@ impl Page {
     #[allow(dead_code)]
     pub(crate) fn get_largest_free_contiguous_space(&self) -> usize {
         let mut maxContigSpaceRecords = 0;
-        let mut ptr_max_contig_space = PAGE_SIZE;
         // Find max Contig Space between records
         // Set pointer to the bottom of page
         let mut botLoc = PAGE_SIZE;
         for record in self.header.vecOfRecords.iter() {
             // set pointer to the beginning of current record
-            let mut topLoc = record.beg_location;
+            let mut topLoc = record.end_location;
             // compare empty space between records/page and first record with
             // current max empty space
             if (botLoc - topLoc) > maxContigSpaceRecords {
                 maxContigSpaceRecords = botLoc - topLoc;
                 // update pointer to beginning of largest contig space location
-                ptr_max_contig_space = topLoc;
-                botLoc = record.end_location;
+                botLoc = record.beg_location;
             } else {
-                botLoc = record.end_location;
+                botLoc = record.beg_location;
             }
         }
         //compare the max contig values and return the largest
         let topLoc = self.get_header_size();
         if (botLoc - topLoc) > maxContigSpaceRecords {
             maxContigSpaceRecords = botLoc - topLoc;
-            ptr_max_contig_space = self.get_header_size();
         }
         maxContigSpaceRecords
     }
