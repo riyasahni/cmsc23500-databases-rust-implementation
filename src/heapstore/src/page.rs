@@ -138,8 +138,8 @@ impl Page {
             if record.slotID == slot_id {
                 slotIdIsValid = true;
                 // update ptr to end of free space if ptr was pointing to deleted record
-                if self.header.ptrEndofFreeSpace == record.end_location {
-                    self.header.ptrEndofFreeSpace = record.beg_location;
+                if self.header.ptrEndofFreeSpace == record.beg_location {
+                    self.header.ptrEndofFreeSpace = record.end_location;
                 }
                 // add slotId of deleted record to vector of deleted slotIDs
                 let deletedRecordSlotID = record.slotID;
@@ -150,8 +150,10 @@ impl Page {
         }
         // return None if slot_id is not valid
         if slotIdIsValid {
-            // remove deleted record from vector of records in header (the slotID is the index)
-            self.header.vecOfRecords.remove(slot_id.into());
+            // remove deleted record from vector of records in header
+            // keep track of index of record
+            let mut recordIndex = self.return_index_of_record_with_valid_slotid(slot_id);
+            self.header.vecOfRecords.remove(recordIndex);
             Some(())
         } else {
             None
@@ -239,6 +241,18 @@ impl Page {
             }
         }
         panic!("Invalid slot id!");
+    }
+
+    /// Utility function to return the index of a record with a valid slotID in vector of records
+    pub fn return_index_of_record_with_valid_slotid(&self, slot_id: SlotId) -> usize {
+        let mut index = 0;
+        for record in &self.header.vecOfRecords {
+            if record.slotID == slot_id {
+                return index;
+            }
+            index += 1;
+        }
+        index
     }
 }
 
