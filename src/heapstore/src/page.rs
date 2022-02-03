@@ -30,6 +30,7 @@ pub(crate) struct Header {
     vecOfRecords: Vec<Record>,
     deletedSlotIDs: Vec<SlotId>,
     PageID: PageId,
+    currentLargestSlotId: SlotId,
 }
 
 /// The functions required for page
@@ -41,6 +42,7 @@ impl Page {
             vecOfRecords: Vec::new(),
             deletedSlotIDs: Vec::new(),
             PageID: page_id,
+            currentLargestSlotId: 0,
         };
 
         let newPage = Page {
@@ -88,7 +90,7 @@ impl Page {
             };
             // push new record into vecOfRecords in page header
             self.header.vecOfRecords.push(newRecord);
-            // update ptr to end of free space in header
+            // update ptr to end of largest free contig space in header
             self.header.ptrEndofFreeSpace = newBegLoc;
             // copy new record data into the page data at the beg_loc
             self.data[newBegLoc..newEndLoc].clone_from_slice(&bytes);
@@ -223,12 +225,15 @@ impl Page {
             // check existing vec of slotIDs and give new record next big slotID or create new slotID
             if self.header.vecOfRecords.is_empty() {
                 return 0;
+            } else {
+                // find the maximum slot_id in the record and the next slotid is that + 1
+                let newSlotID = self.header.currentLargestSlotId + 1;
+                // update the current largest slotId stored in header
+                self.header.currentLargestSlotId = newSlotID;
+                newSlotID
             }
-            let lastSlotID =
-                self.header.vecOfRecords.as_slice()[self.header.vecOfRecords.len() - 1].slotID;
-            lastSlotID + 1
         } else {
-            // reuse the first free SlotID for new record from deleted SlotIDs
+            // reuse the first free SlotID for new record from deleted SlotIDs, since deletedSlotIDs is ordered
             self.header.deletedSlotIDs.remove(0)
         }
     }
@@ -561,10 +566,10 @@ mod tests {
         //Insert big, should go to slot 0 with space later in free block
         assert_eq!(Some(0), p.add_value(&tuple_bytes_big));
 
-        //Insert small, should go to 3
+        //Insert small, should go to 3 (goes to slot 1 instead)
         assert_eq!(Some(3), p.add_value(&tuple_bytes_small1));
 
-        //Insert small, should go to new
+        //Insert small, should go to new slot 4(goes to slot 2 instead)
         assert_eq!(Some(4), p.add_value(&tuple_bytes_small2));
     }
 
