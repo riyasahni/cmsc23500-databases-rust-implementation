@@ -6,6 +6,8 @@ use std::convert::TryInto;
 use std::mem;
 use std::sync::mpsc::Receiver;
 
+use crate::heapfile;
+
 /// The struct for a page. Note this can hold more elements/meta data when created,
 /// but it must be able to be packed/serialized/marshalled into the data array of size
 /// PAGE_SIZE. In the header, you are allowed to allocate 8 bytes for general page metadata and
@@ -27,10 +29,11 @@ pub(crate) struct Record {
 
 pub(crate) struct Header {
     ptrEndofFreeSpace: usize,
-    vecOfRecords: Vec<Record>,
-    deletedSlotIDs: Vec<SlotId>,
     PageID: PageId,
     currentLargestSlotId: SlotId,
+    sizeOfDeletedSlotIDs: u8,
+    deletedSlotIDs: Vec<SlotId>,
+    vecOfRecords: Vec<Record>,
 }
 
 /// The functions required for page
@@ -39,10 +42,11 @@ impl Page {
     pub fn new(page_id: PageId) -> Self {
         let newHeader = Header {
             ptrEndofFreeSpace: PAGE_SIZE,
-            vecOfRecords: Vec::new(),
-            deletedSlotIDs: Vec::new(),
             PageID: page_id,
             currentLargestSlotId: 0,
+            sizeOfDeletedSlotIDs: 0,
+            deletedSlotIDs: Vec::new(),
+            vecOfRecords: Vec::new(),
         };
 
         let newPage = Page {
@@ -123,8 +127,8 @@ impl Page {
         let recordBegLoc = record.beg_location;
         let recordEndLoc = record.end_location;
         // copy each bit from page into vector
-        for bit in recordBegLoc..recordEndLoc {
-            bytesVec.push(self.data[bit]);
+        for byte in recordBegLoc..recordEndLoc {
+            bytesVec.push(self.data[byte]);
         }
         Some(bytesVec)
         // panic!("TODO milestone pg");
@@ -154,8 +158,10 @@ impl Page {
         if slotIdIsValid {
             // remove deleted record from vector of records in header
             let mut recordIndex = self.return_index_of_record_with_valid_slotid(slot_id);
-            // preserve the order of vector of records in header
+            // preserves the order of vector of records in header
             self.header.vecOfRecords.remove(recordIndex);
+            // update size of vector of deletedSlotIds
+            self.header.sizeOfDeletedSlotIDs += 1;
             Some(())
         } else {
             None
@@ -169,6 +175,38 @@ impl Page {
     /// (the example is for a u16 type and the data store in little endian)
     /// u16::from_le_bytes(data[X..Y].try_into().unwrap());
     pub fn from_bytes(data: &[u8]) -> Self {
+        /* // first, deserialize all of the fixed-length data I have in my header
+        let deserialized_ptrEndOfFreeSpace = u16::from_le_bytes(data[0..2].try_into().unwrap());
+        let deserialized_PageID = u16::from_le_bytes(data[2..4].try_into().unwrap());
+        let deserialized_currentLargestSlotId = u16::from_le_bytes(data[4..6].try_into().unwrap());
+        let deserialized_sizeOfdeletedSlotIDs = u8::from_le_bytes(data[6..7].try_into().unwrap());
+        // calculate the max value that the header size can be, given largest slotId (slotId starts at 0)
+        let maxHeaderSize = 8 + 6 * (deserialized_currentLargestSlotId + 1);
+        // get the vector of deserialized deleted slotIDs
+        let deserialized_vecOfDeletedSlotIDs = return_deserialized_vec_of_slotIDs(data);
+        // get the vector of deserialized records (extracted from the header)
+        let deserialized_vecOfRecords = return_deserialized_vec_of_records(data);
+        // write up and save the deserialized header that has been extracted
+        let deserializedHeader = Header {
+            ptrEndofFreeSpace: deserialized_ptrEndOfFreeSpace as usize,
+            PageID: deserialized_PageID,
+            currentLargestSlotId: deserialized_currentLargestSlotId,
+            sizeOfDeletedSlotIDs: deserialized_sizeOfdeletedSlotIDs,
+            deletedSlotIDs: deserialized_vecOfDeletedSlotIDs,
+            vecOfRecords: deserialized_vecOfRecords,
+        };
+        // iterate through remainder of data array & push data into the "data" attribute in Page struct ????????
+        // FILL IN "data: [x, PAGE_SIZE]" ATTRIBUTE OF PAGE STRUCT WITH REMAINING BYTES FROM PROVIDED 'DATA' ARG
+        // let dataForDeserializedPage = []; ?????????????
+        // for byte in data ????????????
+
+        // create the deserialized page
+        let deserializedPage = Page {
+            data: data,
+            header: deserializedHeader,
+        };
+        // return deserialized page
+        deserializedPage */
         panic!("TODO milestone pg");
     }
 
@@ -233,6 +271,8 @@ impl Page {
                 newSlotID
             }
         } else {
+            // update size of vector of deletedSlotIDs
+            self.header.sizeOfDeletedSlotIDs -= 1;
             // reuse the first free SlotID for new record from deleted SlotIDs, since deletedSlotIDs is ordered
             self.header.deletedSlotIDs.remove(0)
         }
@@ -258,6 +298,71 @@ impl Page {
             index += 1;
         }
         index
+    }
+
+    /// Utility function that returns a deserialized vector of deleted slotIDs
+    pub fn return_deserialized_vec_of_slotIDs(data: &[u8]) -> Vec<SlotId> {
+        // deserialize sizeOfdeletedSlotIDs found in header
+        let deserialized_sizeOfdeletedSlotIDs = u8::from_le_bytes(data[6..7].try_into().unwrap());
+        // iterate through bytes of deletedSlotIDs (if not empty) and deserialize & push into vector of SlotIDs (u16)
+        let mut deserialized_vecOfDeletedSlotIDs = Vec::new();
+        if deserialized_sizeOfdeletedSlotIDs == 0 {
+            return deserialized_vecOfDeletedSlotIDs;
+        }
+        for byte in 7..(7 + deserialized_sizeOfdeletedSlotIDs - 2) {
+            let deserialized_deletedSlotId =
+                u16::from_le_bytes(data[byte as usize..(byte + 2) as usize].try_into().unwrap());
+            // push deserialized slotID into vector of deleted slotIDs
+            deserialized_vecOfDeletedSlotIDs.push(deserialized_deletedSlotId);
+            // move to next slotID
+            byte += 2;
+        }
+        // return vector of deleted slotIDs
+        deserialized_vecOfDeletedSlotIDs
+    }
+
+    /// Utility function that returns a deserialized vector of records (extracted from header)
+    pub fn return_deserialized_vec_of_records(data: &[u8]) -> Vec<Record> {
+        let deserialized_sizeOfdeletedSlotIDs = u8::from_le_bytes(data[6..7].try_into().unwrap());
+        let deserialized_currentLargestSlotId = u16::from_le_bytes(data[4..6].try_into().unwrap());
+        // calculate the max value that the header size can be, given largest slotId (slotId starts at 0)
+        let maxHeaderSize = 8 + 6 * (deserialized_currentLargestSlotId + 1);
+        // initialize a vector of records, which I'll fill as I extract records from the data array
+        let mut deserialized_vecOfRecords = Vec::new();
+        // iterate through bytes and extract records & push them into deserialized_vecOfRecords
+        for byte in (7 + deserialized_sizeOfdeletedSlotIDs)..(maxHeaderSize - 6) {
+            // deserialize and save the slotID in the record I'm currently on
+            let deserialized_slotID =
+                u16::from_le_bytes(data[byte as usize..(byte + 2) as usize].try_into().unwrap());
+            // deserialize and save the end location of the record I'm currently on
+            let deserialized_end_location = u16::from_le_bytes(
+                data[(byte + 2) as usize..(byte + 4) as usize]
+                    .try_into()
+                    .unwrap(),
+            );
+            // deserialize and save the beginning location of the record I'm currently on
+            let deserialized_beg_location = u16::from_le_bytes(
+                data[(byte + 4) as usize..(byte + 6) as usize]
+                    .try_into()
+                    .unwrap(),
+            );
+            // write up and save the new deserialized record that has been extracted
+            let deserializedRecord = Record {
+                slotID: deserialized_slotID,
+                end_location: deserialized_end_location as usize,
+                beg_location: deserialized_beg_location as usize,
+            };
+            // push deserialized record into deserialized_vecOfRecords
+            deserialized_vecOfRecords.push(deserializedRecord);
+            // once record slotID = deserialized_currentLargestSlotId then I've hit the end of my records vector
+            if deserialized_slotID == deserialized_currentLargestSlotId {
+                return deserialized_vecOfRecords;
+            } else {
+                // move on to the next record
+                byte += 10;
+            }
+            deserialized_vecOfRecords
+        }
     }
 }
 
