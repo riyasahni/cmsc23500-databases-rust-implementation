@@ -1,0 +1,27 @@
+For my Milestone pg solution, I created a header struct that contains a vector of records, among
+other metadata (i.e. where my free space starts and where my free space ends in the page). 
+The record struct contains the beginning and end locations (in bytes) of each record's information 
+in the page, as well as a flag (u8) to indicate if the record had been deleted or not. I add the data
+for records starting from the bottom of the page, and the corresponding pointer to this information in
+the header, which is an implementation that we discussed in class. The space between where my header ends
+and where the data for the last record I just inserted begins, is the "free space". When I delete a record,
+I shift over the data from all the records above it by the deleted record's length of bytes, so that I can
+perfectly fill in the gap that the deleted record created. With this implementation for delete, it is easy
+to add new records to the page, because I can just add the new record's data on top of the last record's data,
+and I don't have to worry about any remaining space between records that I am not using. In the header, I
+keep track of the records' slot ids by their index position in the vector. When I add a new value, I replace
+the first deleted record's information that I come across with the new record's information. This way, I can 
+easily reuse the deleted vector's slot id, without having to actually keep track of a "slot id" declared variable,
+so I can save header space. 
+
+I spent a lot of time on this project. I started a day after it was assigned, and worked on it (nearly) every day 
+until the day before the due date for at least 5 hours. I am submitting this project on Monday, and 2 days ago
+I had decided to rewrite my entire project with new logic, because I realized I had taken up way too much header 
+space. Despite all of this, and the very gruesome debugging, I was able to complete the project. But now I feel
+exhausted, and we are getting assigned the next project tomorrow, along with a quiz and a homework, and I feel like
+I might explode. I think this project could be improved by having clearer descriptions of the functions and 
+explanations of the tests. Also, I spent so much time learning how to debug things in Rust, and I wish we were given
+more guidance/resources for debugging skills.
+
+My milestone is complete. Whenever I got stuck with logic, I would discuss logic strategies on a high level with my
+friends Ishaan Singh, Andre Dang, and Sophie Veys :)
