@@ -2,15 +2,12 @@ use super::{OpIterator, TupleIterator};
 use common::{AggOp, Attribute, CrustyError, DataType, Field, TableSchema, Tuple};
 use std::cmp::{max, min};
 
-
 /// Contains the index of the field to aggregate and the operator to apply to the column of each group.
 #[derive(Clone)]
-pub struct AggregateField {
-}
+pub struct AggregateField {}
 
 /// Computes an aggregation function over multiple columns and grouped by multiple fields.
-struct Aggregator {
-}
+struct Aggregator {}
 
 impl Aggregator {
     // TODO(williamma12): Add check that schema is set up correctly.
@@ -21,12 +18,9 @@ impl Aggregator {
     /// * `agg_fields` - List of `AggregateField`s to aggregate over. `AggregateField`s contains the aggregation function and the field to aggregate over.
     /// * `groupby_fields` - Indices of the fields to groupby over.
     /// * `schema` - TableSchema of the form [groupby_field attributes ..., agg_field attributes ...]).
-    fn new(
-    ) -> Self {
-        Self {
-        }
+    fn new() -> Self {
+        Self {}
     }
-
 
     /// Handles the creation of groups for aggregation.
     ///
@@ -68,11 +62,9 @@ impl Aggregate {
     /// * `agg_names` - the names of the aggreagte fields in the final aggregation
     /// * `ops` - Aggregate operations, 1:1 correspondence with the indices in agg_indices
     /// * `schema` - Input schema.
-    pub fn new(
-    ) -> Self {
+    pub fn new() -> Self {
         panic!("TODO milestone op");
     }
-
 }
 
 impl OpIterator for Aggregate {
@@ -165,8 +157,7 @@ mod test {
         /// * `expected` - The expected result.
         fn test_no_group(op: AggOp, field: usize, expected: i32) -> Result<(), CrustyError> {
             let schema = TableSchema::new(vec![Attribute::new("agg".to_string(), DataType::Int)]);
-            let mut agg = Aggregator::new(
-            );
+            let mut agg = Aggregator::new();
 
             let ti = tuples();
             for t in &ti {
@@ -186,8 +177,7 @@ mod test {
                 Attribute::new("group".to_string(), DataType::Int),
                 Attribute::new("agg".to_string(), DataType::Int),
             ]);
-            let mut agg = Aggregator::new(
-            );
+            let mut agg = Aggregator::new();
 
             let ti = tuples();
             for t in &ti {
@@ -224,8 +214,7 @@ mod test {
                 Attribute::new("agg".to_string(), DataType::Int),
             ]);
 
-            let mut agg = Aggregator::new(
-            );
+            let mut agg = Aggregator::new();
 
             let ti = tuples();
             for t in &ti {
@@ -261,8 +250,7 @@ mod test {
         #[test]
         fn test_open() -> Result<(), CrustyError> {
             let ti = tuple_iterator();
-            let mut ai = Aggregate::new(
-            );
+            let mut ai = Aggregate::new();
             assert!(!ai.open);
             ai.open()?;
             assert!(ai.open);
@@ -275,8 +263,7 @@ mod test {
             expected: i32,
         ) -> Result<(), CrustyError> {
             let ti = tuple_iterator();
-            let mut ai = Aggregate::new(
-            );
+            let mut ai = Aggregate::new();
             ai.open()?;
             assert_eq!(
                 Field::IntField(expected),
@@ -299,8 +286,7 @@ mod test {
         #[test]
         fn test_multiple_aggs() -> Result<(), CrustyError> {
             let ti = tuple_iterator();
-            let mut ai = Aggregate::new(
-            );
+            let mut ai = Aggregate::new();
             ai.open()?;
             let first_row: Vec<Field> = ai.next()?.unwrap().field_vals().cloned().collect();
             assert_eq!(
@@ -324,8 +310,7 @@ mod test {
         #[test]
         fn test_multiple_aggs_groups() -> Result<(), CrustyError> {
             let ti = tuple_iterator();
-            let mut ai = Aggregate::new(
-            );
+            let mut ai = Aggregate::new();
             let mut result = iter_to_vec(&mut ai)?;
             result.sort();
             let expected = vec![
@@ -346,16 +331,14 @@ mod test {
         #[should_panic]
         fn test_next_not_open() {
             let ti = tuple_iterator();
-            let mut ai = Aggregate::new(
-            );
+            let mut ai = Aggregate::new();
             ai.next().unwrap();
         }
 
         #[test]
         fn test_close() -> Result<(), CrustyError> {
             let ti = tuple_iterator();
-            let mut ai = Aggregate::new(
-            );
+            let mut ai = Aggregate::new();
             ai.open()?;
             assert!(ai.open);
             ai.close()?;
@@ -367,16 +350,14 @@ mod test {
         #[should_panic]
         fn test_rewind_not_open() {
             let ti = tuple_iterator();
-            let mut ai = Aggregate::new(
-            );
+            let mut ai = Aggregate::new();
             ai.rewind().unwrap();
         }
 
         #[test]
         fn test_rewind() -> Result<(), CrustyError> {
             let ti = tuple_iterator();
-            let mut ai = Aggregate::new(
-            );
+            let mut ai = Aggregate::new();
             ai.open()?;
             let count_before = num_tuples(&mut ai);
             ai.rewind()?;
@@ -391,8 +372,7 @@ mod test {
             let mut agg_names = vec!["count", "avg", "max"];
             let mut groupby_names = vec!["group1", "group2"];
             let ti = tuple_iterator();
-            let ai = Aggregate::new(
-            );
+            let ai = Aggregate::new();
             groupby_names.append(&mut agg_names);
             let expected_names = groupby_names;
             let schema = ai.get_schema();

@@ -225,8 +225,7 @@ impl Executor {
                     Self::get_field_indices_names(&agg_fields, child.get_schema())?;
                 let (groupby_indices, groupby_names) =
                     Self::get_field_indices_names(group_by, child.get_schema())?;
-                let agg = Aggregate::new(
-                );
+                let agg = Aggregate::new();
                 Ok(Box::new(agg))
             }
             PhysicalOp::NestedLoopJoin(PhysicalNestedLoopJoinNode {
@@ -241,13 +240,11 @@ impl Executor {
                 if !left_schema.contains(left.column()) {
                     let left_index = Executor::get_field_index(left.column(), right_schema)?;
                     let right_index = Executor::get_field_index(right.column(), left_schema)?;
-                    Ok(Box::new(Join::new(
-                    )))
+                    Ok(Box::new(Join::new()))
                 } else {
                     let left_index = Executor::get_field_index(left.column(), left_schema)?;
                     let right_index = Executor::get_field_index(right.column(), right_schema)?;
-                    Ok(Box::new(Join::new(
-                    )))
+                    Ok(Box::new(Join::new()))
                 }
             }
             PhysicalOp::HashJoin(PhysicalHashJoinNode {
@@ -262,13 +259,11 @@ impl Executor {
                 if !left_schema.contains(left.column()) {
                     let left_index = Executor::get_field_index(left.column(), right_schema)?;
                     let right_index = Executor::get_field_index(right.column(), left_schema)?;
-                    Ok(Box::new(HashEqJoin::new(
-                    )))
+                    Ok(Box::new(HashEqJoin::new()))
                 } else {
                     let left_index = Executor::get_field_index(left.column(), left_schema)?;
                     let right_index = Executor::get_field_index(right.column(), right_schema)?;
-                    Ok(Box::new(HashEqJoin::new(
-                    )))
+                    Ok(Box::new(HashEqJoin::new()))
                 }
             }
             PhysicalOp::Filter(PhysicalFilterNode { predicate, .. }) => {

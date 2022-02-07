@@ -2,9 +2,7 @@ use super::{OpIterator, TupleIterator};
 use common::{CrustyError, Field, SimplePredicateOp, TableSchema, Tuple};
 
 /// Compares the fields of two tuples using a predicate.
-pub struct JoinPredicate {
-}
-
+pub struct JoinPredicate {}
 
 /// Nested loop join implementation.
 pub struct Join {
@@ -22,8 +20,7 @@ impl Join {
     /// * `right_index` - Index of the right field in join condition.
     /// * `left_child` - Left child of join operator.
     /// * `right_child` - Left child of join operator.
-    pub fn new(
-    ) -> Self {
+    pub fn new() -> Self {
         panic!("TODO milestone op");
     }
 }
@@ -67,8 +64,7 @@ impl HashEqJoin {
     /// * `left_child` - Left child of join operator.
     /// * `right_child` - Left child of join operator.
     #[allow(dead_code)]
-    pub fn new(
-    ) -> Self {
+    pub fn new() -> Self {
         panic!("TODO milestone op");
     }
 }
@@ -163,10 +159,8 @@ mod test {
         let s1 = Box::new(scan1());
         let s2 = Box::new(scan2());
         match ty {
-            JoinType::NestedLoop => Box::new(Join::new(
-            )),
-            JoinType::HashEq => Box::new(HashEqJoin::new(
-            )),
+            JoinType::NestedLoop => Box::new(Join::new()),
+            JoinType::HashEq => Box::new(HashEqJoin::new()),
         }
     }
 
