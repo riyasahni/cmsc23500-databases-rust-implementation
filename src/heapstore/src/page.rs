@@ -15,27 +15,6 @@ use crate::heapfile;
 /// up to 8+3*6=26 bytes, leaving the rest (PAGE_SIZE-26 for data) when serialized.
 /// You do not need reclaim header information for a value inserted (eg 6 bytes per value ever inserted)
 /// The rest must filled as much as possible to hold values.
-/*
-pub(crate) struct Page {
-    /// The data for data
-    data: [u8; PAGE_SIZE],
-    header: Header,
-}
-
-pub(crate) struct Record {
-    //pub slotID: SlotId,
-    pub end_location: usize,
-    pub beg_location: usize,
-}
-
-pub(crate) struct Header {
-    ptrEndofFreeSpace: usize,
-    PageID: PageId,
-    currentLargestSlotId: SlotId,
-    sizeOfDeletedSlotIDs: u8,
-    deletedSlotIDs: Vec<SlotId>,
-    vecOfRecords: Vec<Record>,
-} */
 
 pub(crate) struct Page {
     data: [u8; PAGE_SIZE],
@@ -141,6 +120,14 @@ impl Page {
             // save the new record's slot id
             let new_slotid = self.header.vecOfRecords.len() - 1;
             // return the new slot id for the new record!
+            println!(
+                "(add value func) ptr to beg of free space: {}",
+                self.header.ptrBegofFreeSpace
+            );
+            println!(
+                "(add value func) ptr to end of free space: {}",
+                self.header.ptrEndofFreeSpace
+            );
             Some(new_slotid.try_into().unwrap())
         } else {
             None
@@ -149,14 +136,43 @@ impl Page {
 
     /// Return the bytes for the slotId. If the slotId is not valid then return None
     pub fn get_value(&self, slot_id: SlotId) -> Option<Vec<u8>> {
+        let mut bytesVec = Vec::new();
+        for i in 0..self.header.vecOfRecords.len() {
+            if i == slot_id as usize {
+                if self.header.vecOfRecords[i].is_deleted == 1 {
+                    return None;
+                } else {
+                    let beg = self.header.vecOfRecords[i].beg_location;
+                    let end = self.header.vecOfRecords[i].end_location;
+                    for byte in beg..end {
+                        bytesVec.push(self.data[byte as usize]);
+                    }
+                    return Some(bytesVec);
+                }
+            }
+        }
+        return None;
+        /*
         // create a vector to store the record's byte information
         let mut bytesVec = Vec::new();
         // create flag to signal if slotID is occupied/valid
         let slotid_is_valid = 0;
         // if slot_id > the largest index in the vector, then slot_id doesnt exist
+        println!("(get_value) slot_id value: {}", slot_id);
+        println!(
+            "(get value) len of vec of records {}",
+            self.header.vecOfRecords.len()
+        );
+        println!("(get value1) bytesVec {:?}", bytesVec);
         if slot_id > (self.header.vecOfRecords.len() - 1) as u16 {
+            println!("(get_value1) slot_id value: {}", slot_id);
+            println!(
+                "(get value1) len of vec of records {}",
+                self.header.vecOfRecords.len()
+            );
             return None;
         }
+        println!("(get value2) bytesVec {:?}", bytesVec);
         // check if slot_id is valid by going to the corresponding index in the vec
         if self.header.vecOfRecords[slot_id as usize].is_deleted == 1 {
             // if record at index slot_id was deleted, then return None
@@ -170,14 +186,23 @@ impl Page {
             for byte in recordBegLoc..recordEndLoc {
                 bytesVec.push(self.data[byte as usize]);
             }
-        }
-        Some(bytesVec)
+        } */
+        //println!("(get value2) bytesVec {:?}", bytesVec);
+        //Some(bytesVec)
     }
 
     /// Delete the bytes/slot for the slotId. If the slotId is not valid then return None
     /// HINT: Return Some(()) for a valid delete
     pub fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
         // check if slot_id exists in vector of records
+        println!(
+            "(delete function) ptr to end of free space: {}",
+            self.header.ptrEndofFreeSpace
+        );
+        println!(
+            "(delete function) ptr to beg of free space: {}",
+            self.header.ptrBegofFreeSpace
+        );
         if slot_id > (self.header.vecOfRecords.len() - 1) as u16 {
             return None;
         };
@@ -204,6 +229,14 @@ impl Page {
             // then update the end of free space
             self.header.ptrEndofFreeSpace += deleted_record_length;
         }
+        println!(
+            "(delete function) ptr to end of free space: {}",
+            self.header.ptrEndofFreeSpace
+        );
+        println!(
+            "(delete function) ptr to beg of free space: {}",
+            self.header.ptrBegofFreeSpace
+        );
         Some(())
     }
 
@@ -233,22 +266,47 @@ impl Page {
         } */
 
         /////////////////////
+
         // first deserialize all of the fixed-length data I have in my header
         let deserialized_ptrEndOfFreeSpace = u16::from_le_bytes(data[0..2].try_into().unwrap());
-        let deserialized_ptrBegOfFreeSapce = u16::from_le_bytes(data[2..4].try_into().unwrap());
+        println!(
+            "(from bytes1) deserialized ptr to end of free space {}",
+            deserialized_ptrEndOfFreeSpace
+        );
+        let deserialized_ptrBegOfFreeSpace = u16::from_le_bytes(data[2..4].try_into().unwrap());
+        //let deserialized_ptrBegOfFreeSpace = 22;
+        println!(
+            "(from bytes1) deserialized ptr to beg of free space {}",
+            deserialized_ptrBegOfFreeSpace
+        );
         let deserialized_pageID = u16::from_le_bytes(data[4..6].try_into().unwrap());
         // now extract the records from vector of bytes
         let deserialized_vec_of_records = Page::return_deserialized_vec_of_records(data);
+        println!(
+            "length of deserialized vector of records: {}",
+            deserialized_vec_of_records.len()
+        );
         // create data vector for page from given array of bytes
         let mut dataForDeserializedPage = [0; PAGE_SIZE];
         // fill in the data vector for page
         for byte in deserialized_ptrEndOfFreeSpace..PAGE_SIZE.try_into().unwrap() {
             dataForDeserializedPage[byte as usize] = data[byte as usize];
         }
+        let deserialized_ptrEndOfFreeSpace = u16::from_le_bytes(data[0..2].try_into().unwrap());
+        println!(
+            "(from bytes2) deserialized ptr to end of free space {}",
+            deserialized_ptrEndOfFreeSpace
+        );
+        let deserialized_ptrBegOfFreeSpace = u16::from_le_bytes(data[2..4].try_into().unwrap());
+        //let deserialized_ptrBegOfFreeSpace = 22;
+        println!(
+            "(from bytes2) deserialized ptr to beg of free space {}",
+            deserialized_ptrBegOfFreeSpace
+        );
         // create the deserialized header
         let deserializedHeader = Header {
             ptrEndofFreeSpace: deserialized_ptrEndOfFreeSpace,
-            ptrBegofFreeSpace: deserialized_ptrBegOfFreeSapce,
+            ptrBegofFreeSpace: deserialized_ptrBegOfFreeSpace,
             PageID: deserialized_pageID,
             vecOfRecords: deserialized_vec_of_records,
         };
@@ -257,11 +315,22 @@ impl Page {
             data: dataForDeserializedPage,
             header: deserializedHeader,
         };
-        // return deserialized page
+        let deserialized_ptrEndOfFreeSpace = u16::from_le_bytes(data[0..2].try_into().unwrap());
         println!(
+            "(from bytes3) deserialized ptr to end of free space {}",
+            deserialized_ptrEndOfFreeSpace
+        );
+        let deserialized_ptrBegOfFreeSpace = u16::from_le_bytes(data[2..4].try_into().unwrap());
+        //let deserialized_ptrBegOfFreeSpace = 22;
+        println!(
+            "(from bytes3) deserialized ptr to beg of free space {}",
+            deserialized_ptrBegOfFreeSpace
+        );
+        // return deserialized page
+        /*println!(
             "vector of recs len {}",
             deserializedPage.header.vecOfRecords.len()
-        );
+        );*/
         deserializedPage
         // panic!("TODO milestone pg");
     }
@@ -273,40 +342,79 @@ impl Page {
     /// to_le_bytes().to_vec()
     pub fn get_bytes(&self) -> Vec<u8> {
         // serialize the fixed-length components of the header
-        let mut serialized_ptrEndofFreeSpace =
-            u16::to_le_bytes(self.header.ptrEndofFreeSpace).to_vec();
-        let mut serialized_ptrBegofFreeSpace =
-            u16::to_le_bytes(self.header.ptrEndofFreeSpace).to_vec();
-        let mut serialized_PageID = u16::to_le_bytes(self.header.PageID).to_vec();
+        println!(
+            "(get bytes1) deserialized ptr to end of free space {}",
+            self.header.ptrBegofFreeSpace
+        );
+        println!(
+            "(get bytes1) deserialized ptr to beg of free space {}",
+            self.header.ptrEndofFreeSpace
+        );
+        let mut serialized_ptrEndofFreeSpace = self.header.ptrEndofFreeSpace.to_le_bytes();
+        let mut serialized_ptrBegofFreeSpace = self.header.ptrBegofFreeSpace.to_le_bytes();
+        let mut serialized_PageID = self.header.PageID.to_le_bytes();
         // append elements to vector
-        let mut finalVec = serialized_ptrEndofFreeSpace;
-        finalVec.append(&mut serialized_ptrBegofFreeSpace);
-        finalVec.append(&mut serialized_PageID);
+        let mut finalVec = [0; PAGE_SIZE];
+        finalVec[0..2].clone_from_slice(&serialized_ptrEndofFreeSpace);
+        finalVec[2..4].clone_from_slice(&serialized_ptrBegofFreeSpace);
+        finalVec[4..6].clone_from_slice(&serialized_PageID);
+        // println!(
+        //     "(get bytes) final vector just header metadata: {:?}",
+        //     finalVec
+        // );
         // iterate records, serialize each component in the record and directly append to finalVec
-        for record in &self.header.vecOfRecords {
-            let mut serialized_beg_location = u16::to_le_bytes(record.beg_location).to_vec();
-            let mut serialized_end_location = u16::to_le_bytes(record.end_location).to_vec();
-            let mut serialized_is_deleted = u8::to_le_bytes(record.is_deleted).to_vec();
-            finalVec.append(&mut serialized_beg_location);
-            finalVec.append(&mut serialized_end_location);
-            finalVec.append(&mut serialized_is_deleted);
+        let mut count = 6;
+        /*for record in &self.header.vecOfRecords {
+            let mut serialized_beg_location = record.beg_location.to_le_bytes();
+            let mut serialized_end_location = record.end_location.to_le_bytes();
+            let mut serialized_is_deleted = record.is_deleted;
+            finalVec[count..count + 2].clone_from_slice(&serialized_beg_location);
+            finalVec[count + 2..count + 4].clone_from_slice(&serialized_end_location);
+            finalVec[count + 4] = serialized_is_deleted;
+            count += 5;
+        }*/
+        for i in 0..self.header.vecOfRecords.len() {
+            println!(
+                "(get bytes) end loc: {}",
+                self.header.vecOfRecords[i].end_location
+            );
+            println!(
+                "(get bytes) beg loc: {}",
+                self.header.vecOfRecords[i].beg_location
+            );
+            println!(
+                "(get bytes) is deleted: {}",
+                self.header.vecOfRecords[i].is_deleted
+            );
+            let mut serialized_beg_location =
+                self.header.vecOfRecords[i].beg_location.to_le_bytes();
+            let mut serialized_end_location =
+                self.header.vecOfRecords[i].end_location.to_le_bytes();
+            let mut serialized_is_deleted = self.header.vecOfRecords[i].is_deleted;
+            finalVec[count..count + 2].clone_from_slice(&serialized_beg_location);
+            finalVec[count + 2..count + 4].clone_from_slice(&serialized_end_location);
+            finalVec[count + 4] = serialized_is_deleted;
+            count += 5;
         }
-        // now fill vector with 0s to indicate free space
-        let length_of_free_space: u16 =
-            self.header.ptrEndofFreeSpace - self.get_header_size() as u16;
-        // create vector of zeros
-        let zeros = 0 as u8;
-        for byte in self.header.ptrBegofFreeSpace..=(self.header.ptrEndofFreeSpace - 1) {
-            // append vector of zeros;
-            let mut zeros = u8::to_le_bytes(zeros).to_vec();
-            finalVec.append(&mut zeros);
-        }
-        // now append the rest of the actual page data from the beginning
-        let mut page_data = self.data[self.header.ptrEndofFreeSpace as usize..PAGE_SIZE].to_vec();
-        finalVec.append(&mut page_data);
+        // now clone in the rest of the actual page data from the beginning
+        let mut page_data = &self.data[self.header.ptrEndofFreeSpace as usize..PAGE_SIZE];
+        finalVec[self.header.ptrEndofFreeSpace as usize..].clone_from_slice(&page_data);
         // return final vector
-        println!("length of vector: {}", finalVec.len());
-        finalVec
+        //println!("length of vector: {}", finalVec.len());
+        //println!("(get bytes) final vector: {:?}", finalVec);
+        println!(
+            "(get bytes2) deserialized ptr to end of free space {}",
+            self.header.ptrBegofFreeSpace
+        );
+        println!(
+            "(get bytes2) deserialized ptr to beg of free space {}",
+            self.header.ptrEndofFreeSpace
+        );
+        println!(
+            "(get bytes**) # of records  {}",
+            self.header.vecOfRecords.len()
+        );
+        finalVec.to_vec()
     }
 
     /// A utility function to determine the size of the header in the page
@@ -332,6 +440,14 @@ impl Page {
         // deserialize components in the header
         let deserialized_ptrEndOfFreeSpace = u16::from_le_bytes(data[0..2].try_into().unwrap());
         let deserialized_ptrBegOfFreeSpace = u16::from_le_bytes(data[2..4].try_into().unwrap());
+        /*println!(
+            "deserialized ptr to end of free space: {}",
+            deserialized_ptrEndOfFreeSpace
+        );
+        println!(
+            "deserialized ptr to beg of free space: {}",
+            deserialized_ptrBegOfFreeSpace
+        );*/
         let deserialized_pageID = u16::from_le_bytes(data[4..6].try_into().unwrap());
         // now extract the records from vector of bytes
         /*pub(crate) struct Record {
@@ -342,18 +458,34 @@ impl Page {
          */
         // deserialize components in the vector
         let mut byte = 6 as usize;
-        while byte < (deserialized_ptrBegOfFreeSpace - 5) as usize {
-            let deserialized_end_location =
-                u16::from_le_bytes(data[byte..(byte + 2)].try_into().unwrap());
-            let deserialized_beg_locaiton =
-                u16::from_le_bytes(data[(byte + 2)..(byte + 4)].try_into().unwrap());
-            let deserialized_is_deleted =
-                u8::from_le_bytes(data[(byte + 4)..(byte + 5)].try_into().unwrap());
 
+        while byte <= (deserialized_ptrBegOfFreeSpace - 5) as usize {
+            println!(
+                "(return deserialized vec of records func) ptr to beg of free space: {}",
+                deserialized_ptrBegOfFreeSpace
+            );
+            println!("(return deserialized vec of records func) byte: {}", byte);
+            let deserialized_beg_location =
+                u16::from_le_bytes(data[byte..(byte + 2)].try_into().unwrap());
+            let deserialized_end_location =
+                u16::from_le_bytes(data[(byte + 2)..(byte + 4)].try_into().unwrap());
+            let deserialized_is_deleted = data[byte + 4];
+            println!(
+                "(return deserialized vec of records func) end loc: {}",
+                deserialized_end_location
+            );
+            println!(
+                "(return deserialized vec of records func) beg loc: {}",
+                deserialized_beg_location
+            );
+            println!(
+                "(return deserialized vec of records func) is deleted: {}",
+                deserialized_is_deleted
+            );
             // create record
             let deserialized_record = Record {
                 end_location: deserialized_end_location,
-                beg_location: deserialized_beg_locaiton,
+                beg_location: deserialized_beg_location,
                 is_deleted: deserialized_is_deleted,
             };
             // push record into vector of records
@@ -361,6 +493,32 @@ impl Page {
             // go to next record
             byte += 5;
         }
+        /* for mut i in 6..(deserialized_ptrBegOfFreeSpace - 5) as usize {
+            let deserialized_end_location =
+                u16::from_le_bytes(data[i..(i + 2)].try_into().unwrap());
+            let deserialized_beg_location =
+                u16::from_le_bytes(data[(i + 2)..(i + 4)].try_into().unwrap());
+            let deserialized_is_deleted = data[i + 4];
+
+            // create record
+            let deserialized_record = Record {
+                end_location: deserialized_end_location,
+                beg_location: deserialized_beg_location,
+                is_deleted: deserialized_is_deleted,
+            };
+            /*println!(
+                "(return deserialized vec of recs) beg locs of records: {:?}",
+                deserialized_vec_of_records[i].beg_location;
+            );
+            println!(
+                "(return deserialized vec of recs) end locs of records: {:?}",
+                deserialized_vec_of_records[i].end_location
+            );*/
+            // push record into vector of records
+            deserialized_vec_of_records.push(deserialized_record);
+            // go to next record
+            i += 5;
+        }*/
         // return deserialized vector of records
         deserialized_vec_of_records
     }
