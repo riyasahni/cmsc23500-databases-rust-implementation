@@ -405,7 +405,8 @@ impl Page {
 /// This should iterate through all valid values of the page.
 /// See https://stackoverflow.com/questions/30218886/how-to-implement-iterator-and-intoiterator-for-a-simple-struct
 pub struct PageIter {
-    //TODO milestone pg
+    page: Page,
+    index: usize,
 }
 
 /// The implementation of the (consuming) page iterator.
@@ -413,7 +414,10 @@ impl Iterator for PageIter {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        panic!("TODO milestone pg");
+        let result = match self.index {
+//TODO
+
+        }
     }
 }
 
@@ -425,7 +429,10 @@ impl IntoIterator for Page {
     type IntoIter = PageIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        panic!("TODO milestone pg");
+        PageIter {
+            page: self,
+            index: 0,
+        }
     }
 }
 
