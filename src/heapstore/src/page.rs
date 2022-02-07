@@ -39,7 +39,7 @@ impl Page {
     /// Create a new page and a struct for header
     pub fn new(page_id: PageId) -> Self {
         let newHeader = Header {
-            ptrEndofFreeSpace: 4096,
+            ptrEndofFreeSpace: PAGE_SIZE as u16,
             ptrBegofFreeSpace: 6,
             PageID: page_id,
             vecOfRecords: Vec::new(),
@@ -70,15 +70,28 @@ impl Page {
 
     pub fn add_value(&mut self, bytes: &[u8]) -> Option<SlotId> {
         // the new header size would be 5 bytes larger if we added a new record
-        let new_header_size = self.get_header_size() + 5;
+        //let new_header_size = self.get_header_size() + 5;
         // the new pointer to end of free space would move up by the length of the data for record
-        let new_ptr_end_of_free_space = self.header.ptrEndofFreeSpace - bytes.len() as u16;
+        //let new_ptr_end_of_free_space = self.header.ptrEndofFreeSpace - bytes.len() as u16;
         // check to see if there is enough space in the page to add the new record
+        println!(
+            "ptr to end of free space (if I added a value) {}",
+            self.header.ptrEndofFreeSpace
+        );
+        println!("header size {}", self.get_header_size());
+        println!(
+            "largest free contiguous space {}",
+            self.get_largest_free_contiguous_space()
+        );
         if self.get_largest_free_contiguous_space() >= bytes.len() {
+            //if new_ptr_end_of_free_space as usize - self.ptr >= bytes.len() {
             // record's beginning location is offset - record's length
             let new_beg_location = self.header.ptrEndofFreeSpace - bytes.len() as u16;
             // record's end location is what the offset used to be
             let new_end_location = self.header.ptrEndofFreeSpace;
+            println!("bytes_len (add value) {}", bytes.len());
+            println!("new_beg_location (add value) {}", new_beg_location);
+            println!("new end location (add value) {}", new_end_location);
             // reuse slot id of deleted record by inserting new record info in the
             // deleted vector's index
             for j in 0..self.header.vecOfRecords.len() {
@@ -129,18 +142,24 @@ impl Page {
         let mut bytesVec = Vec::new();
         for i in 0..self.header.vecOfRecords.len() {
             if i == slot_id as usize {
+                // check if record w given slotid has been deleted
                 if self.header.vecOfRecords[i].is_deleted == 1 {
+                    // return none if record is deleted
                     return None;
                 } else {
+                    // if record is not deleted, then extract record's data from page
                     let beg = self.header.vecOfRecords[i].beg_location;
                     let end = self.header.vecOfRecords[i].end_location;
+                    // push record's data into a byte vector
                     for byte in beg..end {
                         bytesVec.push(self.data[byte as usize]);
                     }
+                    // return the corresponding record's data as byte vector
                     return Some(bytesVec);
                 }
             }
         }
+        // if slot_id doesn't exist in vec of records then return non
         return None;
     }
 
@@ -211,8 +230,6 @@ impl Page {
             data: dataForDeserializedPage,
             header: deserializedHeader,
         };
-        let deserialized_ptrEndOfFreeSpace = u16::from_le_bytes(data[0..2].try_into().unwrap());
-        let deserialized_ptrBegOfFreeSpace = u16::from_le_bytes(data[2..4].try_into().unwrap());
         // return deserialized page
         deserializedPage
     }
