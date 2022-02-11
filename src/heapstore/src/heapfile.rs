@@ -3,7 +3,7 @@ use common::ids::PageId;
 use common::{CrustyError, PAGE_SIZE};
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, RwLock};
 
@@ -17,14 +17,26 @@ use std::io::{Seek, SeekFrom};
 ///
 /// HINT: You will probably not be able to serialize HeapFile, as it needs to maintain a link to a
 /// File object, which cannot be serialized/deserialized/skipped by serde. You don't need to worry
-/// about persisting read_count/write_count during serialization. 
+/// about persisting read_count/write_count during serialization.
 ///
 /// Your code should persist what information is needed to recreate the heapfile.
 ///
+///*****************************************************************************
+// idea: keep track of the fraction of free space remaining in a page w a
+// "free space" vector.
+//*********************************************************************************
 pub(crate) struct HeapFile {
     // TODO milestone hs (add new fields)
-
+    // pub free_space_map: Vec::new(),
+    // container_id: AtomicU16,
     // The following are for profiling/ correctness checks
+    // store the file path of the HeapFile here
+    // some way to keep track of the offset for the heapfile? prob by # of pages?
+    // "heapfile" is just *one* file that's given to us, which we determine by the file's file path
+    pub hf_file_path: Arc::RwLock::new<PathBuf>, //HOW DO  I FIX THIS ERRORRRR:((((
+    pub free_space_map: Vec<u8>,
+    //  pub hs_offset: u16,
+    // pub vec_of_pages: Vec<Page>,
     pub read_count: AtomicU16,
     pub write_count: AtomicU16,
 }
@@ -54,7 +66,12 @@ impl HeapFile {
         // TODO milestone hs
 
         Ok(HeapFile {
+            // free_space_map:
             // TODO milestone hs init your new field(s)
+            hf_file_path: file_path,
+            free_space_map: Vec::new(),
+            //  hs_offset: 0,
+            // vec_of_pages: Vec::new(),
             read_count: AtomicU16::new(0),
             write_count: AtomicU16::new(0),
         })
@@ -64,7 +81,9 @@ impl HeapFile {
     /// Return type is PageId (alias for another type) as we cannot have more
     /// pages than PageId can hold.
     pub fn num_pages(&self) -> PageId {
-        panic!("TODO milestone hs");
+        // the indexes for elements in free_space_map vector are the page ids
+        let max_page_id = (self.free_space_map.len() - 1) as u16;
+        max_page_id
     }
 
     /// Read the page from the file.
@@ -75,7 +94,32 @@ impl HeapFile {
         {
             self.read_count.fetch_add(1, Ordering::Relaxed);
         }
-        panic!("TODO milestone hs");
+        // if pid > the number of pages in the file, return error
+        if pid > self.num_pages() {
+            return Err(CrustyError::CrustyError(format!(
+                "Cannot open or create heap file",
+            )));
+        }
+        // calculate where the beginning of the page is in the heapfile, given pid
+        let page_offset = pid * 4096;
+        // open file
+        let mut f = File::open(self.hf_file_path).expect("could not open file");
+        // move cursor to the page_offset position in the file
+        f.seek(SeekFrom::Start(page_offset as u64))?;
+        // create buffer (to read 4096 bytes)
+        let mut full_read_page = [0; 4096];
+        // read full page into array
+        let mut index = 0;
+        f.read_to_end(&mut full_read_page.to_vec())
+            .expect("error while reading file");
+        /*for byte in f.bytes() {
+            full_read_page[index] = byte;
+            index += 1;
+        }*/
+        // use "from_bytes" function to convert bytes into full page
+        let final_page = Page::from_bytes(&full_read_page);
+        // return page
+        Ok(final_page)
     }
 
     /// Take a page and write it to the underlying file.
@@ -86,7 +130,21 @@ impl HeapFile {
         {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
-        panic!("TODO milestone hs");
+        // open file
+        let mut f = File::open(self.hf_file_path).expect("could not open file");
+        // calculate where the beginning of the page is in the heapfile, given pid
+        let page_offset = page.get_page_id() * 4096;
+        // move cursor to the page_offset position in the file
+        f.seek(SeekFrom::Start(page_offset as u64))?;
+        // convert page to a vector of bytes
+        let page_bytes = Page::get_bytes(&page);
+        // write/clone bytes into the heapfile
+        let mut index = 0;
+        for byte in f.bytes() {
+            byte = serde::__private::Ok(page_bytes[index]);
+            index += 1;
+        }
+        Ok(())
     }
 }
 
