@@ -3,13 +3,15 @@ use common::ids::PageId;
 use common::{CrustyError, PAGE_SIZE};
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::{Arc, RwLock};
-
 use std::io::BufWriter;
 use std::io::{Seek, SeekFrom};
-
+// use std::os::unix::prelude::FileExt;
+use std::borrow::Borrow;
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 /// The struct for a heap file.  
 ///
 /// HINT: You likely will want to design for interior mutability for concurrent accesses.
@@ -26,21 +28,12 @@ use std::io::{Seek, SeekFrom};
 // "free space" vector.
 //*********************************************************************************
 pub(crate) struct HeapFile {
-    // TODO milestone hs (add new fields)
-    // pub free_space_map: Vec::new(),
-    // container_id: AtomicU16,
-    // The following are for profiling/ correctness checks
-    // store the file path of the HeapFile here
-    // some way to keep track of the offset for the heapfile? prob by # of pages?
-    // "heapfile" is just *one* file that's given to us, which we determine by the file's file path
-    pub hf_file_path: Arc::RwLock::new<PathBuf>, //HOW DO  I FIX THIS ERRORRRR:((((
-    pub free_space_map: Vec<u8>,
-    //  pub hs_offset: u16,
-    // pub vec_of_pages: Vec<Page>,
+    pub hf_file: Arc<RwLock<File>>,
+    pub free_space_map: Arc<RwLock<Vec<u8>>>,
+    //  pub tot_num_of_pages: u16,
     pub read_count: AtomicU16,
     pub write_count: AtomicU16,
 }
-
 /// HeapFile required functions
 impl HeapFile {
     /// Create a new heapfile for the given path and container Id. Return Result<Self> if able to create.
@@ -64,28 +57,31 @@ impl HeapFile {
         };
 
         // TODO milestone hs
-
+        let f = file;
+        let f_lock = Arc::new(RwLock::new(f));
+        let fsm = Vec::new();
+        let fsm_lock = Arc::new(RwLock::new(fsm));
         Ok(HeapFile {
-            // free_space_map:
-            // TODO milestone hs init your new field(s)
-            hf_file_path: file_path,
-            free_space_map: Vec::new(),
-            //  hs_offset: 0,
-            // vec_of_pages: Vec::new(),
+            hf_file: f_lock,
+            free_space_map: fsm_lock,
+            //   tot_num_of_pages: 0,
             read_count: AtomicU16::new(0),
             write_count: AtomicU16::new(0),
         })
     }
-
     /// Return the number of pages for this HeapFile.
     /// Return type is PageId (alias for another type) as we cannot have more
     /// pages than PageId can hold.
     pub fn num_pages(&self) -> PageId {
+        let mut fsm = self.free_space_map.write().unwrap();
         // the indexes for elements in free_space_map vector are the page ids
-        let max_page_id = (self.free_space_map.len() - 1) as u16;
-        max_page_id
+        if fsm.is_empty() {
+            return 0;
+        } else {
+            let max_page_id = fsm.len() as u16;
+            max_page_id
+        }
     }
-
     /// Read the page from the file.
     /// Errors could arise from the filesystem or invalid pageId
     pub(crate) fn read_page_from_file(&self, pid: PageId) -> Result<Page, CrustyError> {
@@ -103,19 +99,16 @@ impl HeapFile {
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = pid * 4096;
         // open file
-        let mut f = File::open(self.hf_file_path).expect("could not open file");
+        let mut f = self.hf_file.write().unwrap();
         // move cursor to the page_offset position in the file
-        f.seek(SeekFrom::Start(page_offset as u64))?;
+        f.seek(SeekFrom::Start(page_offset as u64));
         // create buffer (to read 4096 bytes)
         let mut full_read_page = [0; 4096];
         // read full page into array
-        let mut index = 0;
-        f.read_to_end(&mut full_read_page.to_vec())
+        f.read_exact(&mut full_read_page)
             .expect("error while reading file");
-        /*for byte in f.bytes() {
-            full_read_page[index] = byte;
-            index += 1;
-        }*/
+        // THIS DOESN'T SEEM TO BE WORKING!
+        println!("full read page (read_page_from_file ){:?}", full_read_page);
         // use "from_bytes" function to convert bytes into full page
         let final_page = Page::from_bytes(&full_read_page);
         // return page
@@ -130,20 +123,19 @@ impl HeapFile {
         {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
+        let mut fsm = self.free_space_map.write().unwrap();
+        let page_contig_space = page.get_largest_free_contiguous_space() as u8;
+        fsm.borrow_mut().push(page_contig_space);
         // open file
-        let mut f = File::open(self.hf_file_path).expect("could not open file");
+        let mut f = self.hf_file.write().unwrap();
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = page.get_page_id() * 4096;
         // move cursor to the page_offset position in the file
         f.seek(SeekFrom::Start(page_offset as u64))?;
         // convert page to a vector of bytes
-        let page_bytes = Page::get_bytes(&page);
+        let page_bytes: &[u8] = &Page::get_bytes(&page);
         // write/clone bytes into the heapfile
-        let mut index = 0;
-        for byte in f.bytes() {
-            byte = serde::__private::Ok(page_bytes[index]);
-            index += 1;
-        }
+        f.write(page_bytes);
         Ok(())
     }
 }
@@ -177,7 +169,7 @@ mod test {
         let bytes = get_random_byte_vec(100);
         p0.add_value(&bytes);
         let p0_bytes = p0.get_bytes();
-
+        println!("p0_bytes from test {:?}", p0_bytes);
         hf.write_page_to_file(p0);
         //check the page
         assert_eq!(1, hf.num_pages());
@@ -193,7 +185,7 @@ mod test {
         let bytes = get_random_byte_vec(100);
         p1.add_value(&bytes);
         let p1_bytes = p1.get_bytes();
-
+        println!("p1_bytes from test {:?}", p1_bytes);
         hf.write_page_to_file(p1);
 
         assert_eq!(2, hf.num_pages());

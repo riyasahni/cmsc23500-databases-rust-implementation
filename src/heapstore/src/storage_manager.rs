@@ -7,7 +7,7 @@ use common::testutil::gen_random_dir;
 use common::PAGE_SIZE;
 use std::collections::HashMap;
 use std::fs;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 
@@ -63,6 +63,9 @@ impl StorageTrait for StorageManager {
     /// Create a new storage manager that will use storage_path as the location to persist data
     /// (if the storage manager persists records on disk)
     fn new(storage_path: String) -> Self {
+        // consider case that there is already a storage path that exists with some data
+        // first load old files into storage manager
+        // if there is no existing file then create new storage manager
         panic!("TODO milestone hs");
     }
 
@@ -124,12 +127,12 @@ impl StorageTrait for StorageManager {
         panic!("TODO milestone hs");
     }
 
-    /// Create a new container to be stored. 
+    /// Create a new container to be stored.
     /// fn create_container(&self, name: String) -> ContainerId;
     /// Creates a new container object.
-    /// For this milestone you will not need to utilize 
+    /// For this milestone you will not need to utilize
     /// the container_config, name, container_type, or dependencies
-    /// 
+    ///
     ///
     /// # Arguments
     ///
@@ -199,7 +202,7 @@ impl StorageTrait for StorageManager {
 
     /// Shutdown the storage manager. Can call drop. Should be safe to call multiple times.
     /// If temp, this should remove all stored files.
-    /// If not a temp SM, this should serialize the mapping between containerID and Heapfile. 
+    /// If not a temp SM, this should serialize the mapping between containerID and Heapfile.
     /// HINT: Heapfile won't be serializable/deserializable. You'll want to serialize information
     /// that can be used to create a HeapFile object pointing to the same data. You don't need to
     /// worry about recreating read_count or write_count.
@@ -256,7 +259,9 @@ impl StorageTrait for StorageManager {
                 _ => {
                     // FIXME: get error from csv reader
                     error!("Could not read row from CSV");
-                    return Err(CrustyError::IOError("Could not read row from CSV".to_string()))
+                    return Err(CrustyError::IOError(
+                        "Could not read row from CSV".to_string(),
+                    ));
                 }
             }
         }
