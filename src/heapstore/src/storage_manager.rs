@@ -1,6 +1,6 @@
 use crate::heapfile::HeapFile;
 use crate::heapfileiter::HeapFileIterator;
-use crate::page::Page;
+use crate::page::{Header, Page};
 use common::prelude::*;
 use common::storage_trait::StorageTrait;
 use common::testutil::gen_random_dir;
@@ -15,6 +15,8 @@ use std::sync::{Arc, RwLock};
 #[derive(Serialize, Deserialize)]
 pub struct StorageManager {
     /// Path to database metadata files.
+    pub containers: Arc<RwLock<HashMap<ContainerId, HeapFile>>>,
+    pub hf: HeapFile,
     pub storage_path: String,
     is_temp: bool,
 }
@@ -30,7 +32,26 @@ impl StorageManager {
         _perm: Permissions,
         _pin: bool,
     ) -> Option<Page> {
-        panic!("TODO milestone hs");
+        let containers_lock = self.containers.write().unwrap();
+        // iterate through containers,
+        for (key, value) in containers_lock.iter() {
+            // check if containerid == container_id
+            if key == &container_id {
+                // save that heapfile
+                let hf = value;
+                // check if page_id exists in heapfile
+                if hf.free_space_map.is_empty() {
+                    return None;
+                }
+                if page_id > hf.free_space_map.len() - 1 {
+                    return None;
+                }
+                // if page_id exists, then read page from file & return the page
+                HeapFile::read_page_from_file(hf, page_id)
+            }
+        }
+        // if container didn't exist, return None
+        None
     }
 
     /// Write a page
@@ -40,19 +61,56 @@ impl StorageManager {
         page: Page,
         _tid: TransactionId,
     ) -> Result<(), CrustyError> {
-        panic!("TODO milestone hs");
+        let containers_lock = self.containers.write().unwrap();
+        // iterate through containers,
+        for (key, value) in containers_lock.iter() {
+            // check if containerid == container_id
+            if key == &container_id {
+                // save that heapfile
+                let hf = value;
+                // write page to file
+                HeapFile::write_page_to_file(hf, page);
+            }
+        }
+        Ok(())
     }
 
     /// Get the number of pages for a container
     fn get_num_pages(&self, container_id: ContainerId) -> PageId {
-        panic!("TODO milestone hs");
+        let containers_lock = self.containers.write().unwrap();
+        // iterate through containers,
+        for (key, value) in containers_lock.iter() {
+            // check if containerid == container_id
+            if key == &container_id {
+                // save that heapfile
+                let hf = value;
+                // return # of pages in file
+                HeapFile::num_pages(hf)
+            }
+        }
     }
 
     /// Test utility function for counting reads and writes served by the heap file.
     /// Can return 0,0 for invalid container_ids
     #[allow(dead_code)]
     pub(crate) fn get_hf_read_write_count(&self, container_id: ContainerId) -> (u16, u16) {
-        panic!("TODO milestone hs");
+        let containers_lock = self.containers.write().unwrap();
+        // iterate through containers,
+        for (key, value) in containers_lock.iter() {
+            // check if containerid == container_id
+            if key == &container_id {
+                // save heapfile
+                let hf = value;
+                // store the read count from file
+                let read_count = hf.read_count;
+                // store write count from file
+                let write_count = hf.write_count;
+                // return (read_count, write_count)
+                (read_count, write_count)
+            }
+        }
+        // return (0, 0) for invlaid container_id
+        (0, 0)
     }
 }
 
@@ -145,7 +203,22 @@ impl StorageTrait for StorageManager {
         _container_type: common::ids::StateType,
         _dependencies: Option<Vec<ContainerId>>,
     ) -> Result<(), CrustyError> {
-        panic!("TODO milestone hs");
+        // unlock containers field
+        let mut containers = self.containers.write().unwrap();
+        // create new heapfile with given container id
+        let new_heapfile = self.hf;
+        // if container already has container id then don't add container id again
+        if containers.contains_key(&container_id) {
+            debug!(
+                "memstore::create_container container_id: {:?} already exists",
+                &container_id
+            );
+            return Ok(());
+        }
+        // else, insert new heapfile (value) with given container_id (key)
+        containers.insert(container_id, new_heapfile);
+        Ok(())
+        // panic!("TODO milestone hs");
     }
 
     /// A wrapper function to call create container

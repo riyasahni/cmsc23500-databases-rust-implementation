@@ -107,8 +107,6 @@ impl HeapFile {
         // read full page into array
         f.read_exact(&mut full_read_page)
             .expect("error while reading file");
-        // THIS DOESN'T SEEM TO BE WORKING!
-        println!("full read page (read_page_from_file ){:?}", full_read_page);
         // use "from_bytes" function to convert bytes into full page
         let final_page = Page::from_bytes(&full_read_page);
         // return page
@@ -124,8 +122,8 @@ impl HeapFile {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
         let mut fsm = self.free_space_map.write().unwrap();
-        let page_contig_space = page.get_largest_free_contiguous_space() as u8;
-        fsm.borrow_mut().push(page_contig_space);
+        let fraction_of_page_contig_space = (page.get_largest_free_contiguous_space() / 10) as u8;
+        fsm.borrow_mut().push(fraction_of_page_contig_space);
         // open file
         let mut f = self.hf_file.write().unwrap();
         // calculate where the beginning of the page is in the heapfile, given pid
@@ -169,7 +167,6 @@ mod test {
         let bytes = get_random_byte_vec(100);
         p0.add_value(&bytes);
         let p0_bytes = p0.get_bytes();
-        println!("p0_bytes from test {:?}", p0_bytes);
         hf.write_page_to_file(p0);
         //check the page
         assert_eq!(1, hf.num_pages());
@@ -185,7 +182,6 @@ mod test {
         let bytes = get_random_byte_vec(100);
         p1.add_value(&bytes);
         let p1_bytes = p1.get_bytes();
-        println!("p1_bytes from test {:?}", p1_bytes);
         hf.write_page_to_file(p1);
 
         assert_eq!(2, hf.num_pages());
