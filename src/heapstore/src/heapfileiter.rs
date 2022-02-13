@@ -15,6 +15,7 @@ pub struct HeapFileIterator {
     heapfile: Arc<HeapFile>,
     container_id: ContainerId,
     transaction_id: TransactionId,
+    page_index: u16,
 }
 
 /// Required HeapFileIterator functions
@@ -27,9 +28,9 @@ impl HeapFileIterator {
             heapfile: hf,
             container_id: container_id,
             transaction_id: tid,
+            page_index: 0,
         };
         new_HeapFileIter
-        //  panic!("TODO milestone hs");
     }
 }
 
@@ -38,10 +39,22 @@ impl HeapFileIterator {
 impl Iterator for HeapFileIterator {
     type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
-        // open heapfile in containder w container_id
+        // open heapfile
+        let hf = self.heapfile;
         // iterate through pages in heapfile
-        // use "PageIter" to iterate through records in each page
-        // container_id += 1 for the next iteration?
+        if hf.free_space_map.len().is_empty() {
+            // if there are no pages in heapfile, return none
+            return None;
+        }
+        // if we're out of pages, return none
+        if self.page_index as u16 > hf.num_pages() {
+            return None;
+        }
+        // save the page we want to iterate
+        let page_to_iterate = HeapFile::read_page_from_file(hf, self.page_index);
+        // iterate through page
+        // once done iterating through page, move to the next page (self.page_index += 1)
+        //
         panic!("TODO milestone hs");
     }
 }

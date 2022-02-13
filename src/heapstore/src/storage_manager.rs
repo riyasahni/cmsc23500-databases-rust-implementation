@@ -16,7 +16,7 @@ use std::sync::{Arc, RwLock};
 pub struct StorageManager {
     /// Path to database metadata files.
     pub containers: Arc<RwLock<HashMap<ContainerId, HeapFile>>>,
-    pub hf: HeapFile,
+    // pub hf: HeapFile,
     pub storage_path: String,
     is_temp: bool,
 }
@@ -40,14 +40,14 @@ impl StorageManager {
                 // save that heapfile
                 let hf = value;
                 // check if page_id exists in heapfile
-                if hf.free_space_map.is_empty() {
+                if hf.free_space_map.write().unwrap().is_empty() {
                     return None;
                 }
-                if page_id > hf.free_space_map.len() - 1 {
+                if page_id > hf.free_space_map.len().write().unwrap() - 1 {
                     return None;
                 }
                 // if page_id exists, then read page from file & return the page
-                HeapFile::read_page_from_file(hf, page_id)
+                return Some(HeapFile::read_page_from_file(hf, page_id));
             }
         }
         // if container didn't exist, return None
@@ -85,7 +85,7 @@ impl StorageManager {
                 // save that heapfile
                 let hf = value;
                 // return # of pages in file
-                HeapFile::num_pages(hf)
+                return HeapFile::num_pages(hf);
             }
         }
     }
@@ -106,7 +106,7 @@ impl StorageManager {
                 // store write count from file
                 let write_count = hf.write_count;
                 // return (read_count, write_count)
-                (read_count, write_count)
+                return (read_count as u16, write_count as u16);
             }
         }
         // return (0, 0) for invlaid container_id
@@ -206,7 +206,7 @@ impl StorageTrait for StorageManager {
         // unlock containers field
         let mut containers = self.containers.write().unwrap();
         // create new heapfile with given container id
-        let new_heapfile = self.hf;
+        let new_heapfile = ;
         // if container already has container id then don't add container id again
         if containers.contains_key(&container_id) {
             debug!(

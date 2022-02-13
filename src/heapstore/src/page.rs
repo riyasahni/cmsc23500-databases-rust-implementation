@@ -310,7 +310,7 @@ impl Iterator for PageIter {
         for i in 0..self.page.header.vec_of_records.len() {
             // check if we're on the record that corresponds with this index
             // check if the record is deleted or not
-            if (self.page.header.vec_of_records[i].is_deleted == 0) {
+            if self.page.header.vec_of_records[i].is_deleted == 0 {
                 // if record is not deleted, add record to my valid_records vector
                 valid_records.push(&self.page.header.vec_of_records[i]);
             }
