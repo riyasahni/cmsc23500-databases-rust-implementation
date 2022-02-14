@@ -16,7 +16,6 @@ use std::sync::{Arc, RwLock};
 pub struct StorageManager {
     /// Path to database metadata files.
     pub containers: Arc<RwLock<HashMap<ContainerId, HeapFile>>>,
-    // pub hf: HeapFile,
     pub storage_path: String,
     is_temp: bool,
 }
@@ -102,11 +101,11 @@ impl StorageManager {
                 // save heapfile
                 let hf = value;
                 // store the read count from file
-                let read_count = hf.read_count;
+                let write_count = hf.write_count.load(Ordering::Relaxed);
                 // store write count from file
-                let write_count = hf.write_count;
-                // return (read_count, write_count)
-                return (read_count as u16, write_count as u16);
+                let read_count = hf.read_count.load(Ordering::Relaxed);
+                // return (read_count, write_count)   
+                return (read_count, write_count);
             }
         }
         // return (0, 0) for invlaid container_id
@@ -121,18 +120,26 @@ impl StorageTrait for StorageManager {
     /// Create a new storage manager that will use storage_path as the location to persist data
     /// (if the storage manager persists records on disk)
     fn new(storage_path: String) -> Self {
-        // consider case that there is already a storage path that exists with some data
-        // first load old files into storage manager
-        // if there is no existing file then create new storage manager
-        panic!("TODO milestone hs");
+        // construct a new, empty SM
+        let new_SM = StorageManager {
+            containers: Arc::new(RwLock::new(HashMap)),
+            storage_path: storage_path,
+            is_temp: false,
+        };
+        // return it
+        new_SM
     }
 
     /// Create a new storage manager for testing. If this creates a temporary directory it should be cleaned up
     /// when it leaves scope.
     fn new_test_sm() -> Self {
+        init();
         let storage_path = gen_random_dir().to_string_lossy().to_string();
         debug!("Making new temp storage_manager {}", storage_path);
-        panic!("TODO milestone hs");
+        // use new() and storage_path to make test SM
+        let test_SM = new(storage_path);
+        // return test SM
+        test_SM
     }
 
     fn get_simple_config() -> common::ContainerConfig {
@@ -153,7 +160,25 @@ impl StorageTrait for StorageManager {
         if value.len() > PAGE_SIZE {
             panic!("Cannot handle inserting a value larger than the page size");
         }
-        panic!("TODO milestone hs");
+        let containers_lock = self.containers.write().unwrap();
+        // iterate through containers,
+        for (key, value) in containers_lock.iter() {
+            // if heapfile corresponding with container_id exists
+            if key == container_id {
+                // save heapfile
+                let hf = value;
+                // check hf's free space map to find first available page to insert value
+                for i in 0..(hf.free_space_map.len() - 1) as usize {
+
+                }
+            }
+        }
+            
+            // if available page exists, add_value to page and update free space map
+            // else, write new page to hf, add_value to page, and update free space map
+        // else panic!
+
+            // panic!("TODO milestone hs");
     }
 
     /// Insert some bytes into a container for vector of values (e.g. record).
@@ -260,17 +285,19 @@ impl StorageTrait for StorageManager {
 
     /// Notify the storage manager that the transaction is finished so that any held resources can be released.
     fn transaction_finished(&self, tid: TransactionId) {
-        panic!("TODO milestone tm");
+        panic!("TODO milestone tm (IGNORE)");
     }
 
     /// Testing utility to reset all state associated the storage manager.
     fn reset(&self) -> Result<(), CrustyError> {
+        // probably deserializes everything in the SM and recreates the 
+        // structs (the heapfiles and pages within the heapfiles, etc etc...)
         panic!("TODO milestone hs");
     }
 
     /// If there is a buffer pool or cache it should be cleared/reset.
     fn clear_cache(&self) {
-        panic!("TODO milestone hs");
+        panic!("TODO milestone hs (IGNORE)");
     }
 
     /// Shutdown the storage manager. Can call drop. Should be safe to call multiple times.
@@ -280,6 +307,9 @@ impl StorageTrait for StorageManager {
     /// that can be used to create a HeapFile object pointing to the same data. You don't need to
     /// worry about recreating read_count or write_count.
     fn shutdown(&self) {
+        // let mut file = File::create(file path + "foo.txt")?;
+        // serialize contents of hashmap
+        // add to file with the file path = self.storage_path 
         panic!("TODO milestone hs");
     }
 

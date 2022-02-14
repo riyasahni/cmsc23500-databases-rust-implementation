@@ -53,8 +53,11 @@ impl Iterator for HeapFileIterator {
         // save the page we want to iterate
         let page_to_iterate = HeapFile::read_page_from_file(hf, self.page_index);
         // iterate through page
+        let mut p_iter = page_to_iterate.into_iter();
+        iter.next();
         // once done iterating through page, move to the next page (self.page_index += 1)
-        //
-        panic!("TODO milestone hs");
+        if iter.next().is_none() {
+            self.page_index += 1;
+        }
     }
 }

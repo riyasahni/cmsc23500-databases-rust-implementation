@@ -29,7 +29,7 @@ use std::sync::{Arc, Mutex, RwLock};
 //*********************************************************************************
 pub(crate) struct HeapFile {
     pub hf_file: Arc<RwLock<File>>,
-    pub free_space_map: Arc<RwLock<Vec<u8>>>,
+    pub free_space_map: Arc<RwLock<Vec<u16>>>,
     //  pub tot_num_of_pages: u16,
     pub read_count: AtomicU16,
     pub write_count: AtomicU16,
@@ -122,8 +122,8 @@ impl HeapFile {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
         let mut fsm = self.free_space_map.write().unwrap();
-        let fraction_of_page_contig_space = (page.get_largest_free_contiguous_space() / 10) as u8;
-        fsm.borrow_mut().push(fraction_of_page_contig_space);
+        let page_contig_space = (page.get_largest_free_contiguous_space()) as u16;
+        fsm.borrow_mut().push(page_contig_space);
         // open file
         let mut f = self.hf_file.write().unwrap();
         // calculate where the beginning of the page is in the heapfile, given pid
