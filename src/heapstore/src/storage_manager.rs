@@ -4,7 +4,9 @@ use crate::page::{Header, Page};
 use common::prelude::*;
 use common::storage_trait::StorageTrait;
 use common::testutil::gen_random_dir;
+use common::testutil::init;
 use common::PAGE_SIZE;
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,8 +16,8 @@ use std::sync::{Arc, RwLock};
 /// The StorageManager struct
 #[derive(Serialize, Deserialize)]
 pub struct StorageManager {
+    pub containers: Arc<RwLock<HashMap<ContainerId, PathBuf>>>,
     /// Path to database metadata files.
-    pub containers: Arc<RwLock<HashMap<ContainerId, HeapFile>>>,
     pub storage_path: String,
     is_temp: bool,
 }
@@ -37,16 +39,17 @@ impl StorageManager {
             // check if containerid == container_id
             if key == &container_id {
                 // save that heapfile
-                let hf = value;
+                let hf_file_path = value.clone();
+                let hf = HeapFile::new(hf_file_path).unwrap();
                 // check if page_id exists in heapfile
                 if hf.free_space_map.write().unwrap().is_empty() {
                     return None;
                 }
-                if page_id > hf.free_space_map.len().write().unwrap() - 1 {
+                if page_id > (hf.free_space_map.write().unwrap().len() - 1) as u16 {
                     return None;
                 }
                 // if page_id exists, then read page from file & return the page
-                return Some(HeapFile::read_page_from_file(hf, page_id));
+                Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
             }
         }
         // if container didn't exist, return None
@@ -66,9 +69,10 @@ impl StorageManager {
             // check if containerid == container_id
             if key == &container_id {
                 // save that heapfile
-                let hf = value;
+                let hf_file_path = value.clone();
+                let hf = HeapFile::new(hf_file_path).unwrap();
                 // write page to file
-                HeapFile::write_page_to_file(hf, page);
+                return HeapFile::write_page_to_file(&hf, page);
             }
         }
         Ok(())
@@ -82,11 +86,13 @@ impl StorageManager {
             // check if containerid == container_id
             if key == &container_id {
                 // save that heapfile
-                let hf = value;
+                let hf_file_path = value.clone();
+                let hf = HeapFile::new(hf_file_path).unwrap();
                 // return # of pages in file
-                return HeapFile::num_pages(hf);
+                return HeapFile::num_pages(&hf);
             }
         }
+        panic!("Invalid container id!");
     }
 
     /// Test utility function for counting reads and writes served by the heap file.
@@ -98,13 +104,14 @@ impl StorageManager {
         for (key, value) in containers_lock.iter() {
             // check if containerid == container_id
             if key == &container_id {
-                // save heapfile
-                let hf = value;
+                // save that heapfile
+                let hf_file_path = value.clone();
+                let hf = HeapFile::new(hf_file_path).unwrap();
                 // store the read count from file
                 let write_count = hf.write_count.load(Ordering::Relaxed);
                 // store write count from file
                 let read_count = hf.read_count.load(Ordering::Relaxed);
-                // return (read_count, write_count)   
+                // return (read_count, write_count)
                 return (read_count, write_count);
             }
         }
@@ -120,9 +127,17 @@ impl StorageTrait for StorageManager {
     /// Create a new storage manager that will use storage_path as the location to persist data
     /// (if the storage manager persists records on disk)
     fn new(storage_path: String) -> Self {
-        // construct a new, empty SM
+        // CHECK IF THE STORAGE_PATH ALREADY EXISTS
+        // IF YES,
+        // THEN OPEN UP THE FILE "SM_SAVED_DATA" (EACH SAVED SERIALIZED FILE WILL HAVE THE SAME NAME
+        // BECAUSE WE KNOW THEY'LL ALL BE IN DIFFERENT DIRECTORIES)
+        // THIS FILE CONTAINS THE SERIALIZED HASHMAP BETWEEN CONTAINER IDS AND HEAPFILES
+        // I CAN JUST DESERIALIZE THIS FILE TO RECREATE THE HASHMAP
+        // POP THAT HASHMAP BACK INTO THIS SM (WITH THE GIVEN, EXISTING STORAGE_PATH)
+        // RETURN THE RECREATED SM!!
+        // ELSE, construct a new, empty SM
         let new_SM = StorageManager {
-            containers: Arc::new(RwLock::new(HashMap)),
+            containers: Arc::new(RwLock::new(HashMap::new())),
             storage_path: storage_path,
             is_temp: false,
         };
@@ -137,7 +152,7 @@ impl StorageTrait for StorageManager {
         let storage_path = gen_random_dir().to_string_lossy().to_string();
         debug!("Making new temp storage_manager {}", storage_path);
         // use new() and storage_path to make test SM
-        let test_SM = new(storage_path);
+        let test_SM = StorageManager::new(storage_path);
         // return test SM
         test_SM
     }
@@ -162,23 +177,55 @@ impl StorageTrait for StorageManager {
         }
         let containers_lock = self.containers.write().unwrap();
         // iterate through containers,
-        for (key, value) in containers_lock.iter() {
+        for (key, val) in containers_lock.iter() {
             // if heapfile corresponding with container_id exists
-            if key == container_id {
-                // save heapfile
-                let hf = value;
+            if key == &container_id {
+                // save that heapfile
+                let hf_file_path = val.clone();
+                let hf = HeapFile::new(hf_file_path).unwrap();
+                let mut fsm = hf.free_space_map.write().unwrap();
                 // check hf's free space map to find first available page to insert value
-                for i in 0..(hf.free_space_map.len() - 1) as usize {
-
+                for i in 0..(fsm.len() - 1) as u16 {
+                    let mut page_from_hf = HeapFile::read_page_from_file(&hf, i).unwrap();
+                    // if available page exists, add_value to page and update free space map
+                    if Page::add_value(&mut page_from_hf, &value).is_some() {
+                        let new_slot_id = Page::add_value(&mut page_from_hf, &value);
+                        fsm[i as usize] =
+                            Page::get_largest_free_contiguous_space(&page_from_hf) as u16;
+                        // create ValueID
+                        let new_value_id = ValueId {
+                            container_id: container_id,
+                            segment_id: None,
+                            page_id: serde::__private::Some(i),
+                            slot_id: new_slot_id,
+                        };
+                        // return ValueID
+                        return new_value_id;
+                    }
                 }
+                // if no existing available page, then write new page to hf
+                let new_page_id = fsm.len();
+                let mut new_Page = Page::new(new_page_id.try_into().unwrap());
+                let mut new_Page_clone = Page::new(new_page_id.try_into().unwrap());
+                HeapFile::write_page_to_file(&hf, new_Page);
+                // add_value to page, and update free space map
+                let new_slot_id = Page::add_value(&mut new_Page_clone, &value);
+                let new_page_free_space =
+                    Page::get_largest_free_contiguous_space(&new_Page_clone) as u16;
+                fsm.push(new_page_free_space);
+                // create ValueID
+                let new_value_id = ValueId {
+                    container_id: container_id,
+                    segment_id: None,
+                    page_id: Some(new_page_id.try_into().unwrap()),
+                    slot_id: new_slot_id,
+                };
+                // return ValueID
+                return new_value_id;
             }
         }
-            
-            // if available page exists, add_value to page and update free space map
-            // else, write new page to hf, add_value to page, and update free space map
         // else panic!
-
-            // panic!("TODO milestone hs");
+        panic!("Invalid Container ID!");
     }
 
     /// Insert some bytes into a container for vector of values (e.g. record).
@@ -190,12 +237,39 @@ impl StorageTrait for StorageManager {
         values: Vec<Vec<u8>>,
         tid: TransactionId,
     ) -> Vec<ValueId> {
-        panic!("TODO milestone hs");
+        // create vector of value ids that I will return
+        let mut vec_of_value_ids = Vec::new();
+        for val in values.iter() {
+            let val_id = self.insert_value(container_id, val.to_vec(), tid);
+            vec_of_value_ids.push(val_id);
+        }
+        vec_of_value_ids
     }
 
     /// Delete the data for a value. If the valueID is not found it returns Ok() still.
     fn delete_value(&self, id: ValueId, tid: TransactionId) -> Result<(), CrustyError> {
-        panic!("TODO milestone hs");
+        let container_id = id.container_id;
+        let page_id = id.page_id.unwrap();
+        let slot_id = id.slot_id.unwrap();
+        // find the heapfile associated with container_id that's stored in ValueID
+        let mut containers_lock = self.containers.write().unwrap();
+        if containers_lock.contains_key(&container_id) {
+            // extract heapfile's file path from hashmap
+            let hf_file_path = containers_lock.borrow_mut().get(&container_id).unwrap();
+            // contruct the heapfile from given container_id & hf_file_path
+            let hf = HeapFile::new(hf_file_path.to_path_buf()).unwrap();
+            let fsm = hf.free_space_map.write().unwrap();
+            // check if page with given page id exists & extract
+            if page_id <= (fsm.len() - 1) as u16 {
+                // extract page with given page_id
+                let mut extracted_page = HeapFile::read_page_from_file(&hf, page_id).unwrap();
+                // delete_value() on page for given slot_id if the corresponding record exists
+                Page::delete_value(&mut extracted_page, slot_id);
+                // done
+                return Ok(());
+            }
+        }
+        Ok(())
     }
 
     /// Updates a value. Returns valueID on update (which may have changed). Error on failure
@@ -207,7 +281,13 @@ impl StorageTrait for StorageManager {
         id: ValueId,
         _tid: TransactionId,
     ) -> Result<ValueId, CrustyError> {
-        panic!("TODO milestone hs");
+        let container_id = id.container_id;
+        let page_id = id.page_id.unwrap();
+        let slot_id = id.slot_id.unwrap();
+        // first delete the record
+        self.delete_value(id, _tid);
+        // then re-insert record into heapfile
+        Ok(self.insert_value(container_id, value, _tid))
     }
 
     /// Create a new container to be stored.
@@ -230,8 +310,10 @@ impl StorageTrait for StorageManager {
     ) -> Result<(), CrustyError> {
         // unlock containers field
         let mut containers = self.containers.write().unwrap();
-        // create new heapfile with given container id
-        let new_heapfile = ;
+        // construct the new heapfile path
+        let mut new_heapfile_path = PathBuf::new();
+        new_heapfile_path.push(&self.storage_path);
+        new_heapfile_path.push("hf_path.hf");
         // if container already has container id then don't add container id again
         if containers.contains_key(&container_id) {
             debug!(
@@ -241,9 +323,8 @@ impl StorageTrait for StorageManager {
             return Ok(());
         }
         // else, insert new heapfile (value) with given container_id (key)
-        containers.insert(container_id, new_heapfile);
+        containers.insert(container_id, new_heapfile_path);
         Ok(())
-        // panic!("TODO milestone hs");
     }
 
     /// A wrapper function to call create container
@@ -260,7 +341,15 @@ impl StorageTrait for StorageManager {
     /// Remove the container and all stored values in the container.
     /// If the container is persisted remove the underlying files
     fn remove_container(&self, container_id: ContainerId) -> Result<(), CrustyError> {
-        panic!("TODO milestone hs");
+        // remove container id from hashmap
+        let mut hm_container_id_lock = self.containers.write().unwrap();
+        hm_container_id_lock.remove(&container_id);
+        // delete the heapfile w associated container id
+        let hf_file_path = hm_container_id_lock.remove(&container_id).unwrap();
+        // removes file given its file path...
+        fs::remove_file(hf_file_path);
+        Ok(())
+        //  panic!("TODO milestone hs");
     }
 
     /// Get an iterator that returns all valid records
@@ -271,6 +360,9 @@ impl StorageTrait for StorageManager {
         _perm: Permissions,
     ) -> Self::ValIterator {
         panic!("TODO milestone hs");
+        // map file to num of pages
+        // get me first page now on this page let me call iterator for this page
+        //
     }
 
     /// Get the data for a particular ValueId. Error if does not exists
@@ -290,8 +382,8 @@ impl StorageTrait for StorageManager {
 
     /// Testing utility to reset all state associated the storage manager.
     fn reset(&self) -> Result<(), CrustyError> {
-        // probably deserializes everything in the SM and recreates the 
-        // structs (the heapfiles and pages within the heapfiles, etc etc...)
+        // just creates a brand new, empty SM...
+
         panic!("TODO milestone hs");
     }
 
@@ -309,7 +401,9 @@ impl StorageTrait for StorageManager {
     fn shutdown(&self) {
         // let mut file = File::create(file path + "foo.txt")?;
         // serialize contents of hashmap
-        // add to file with the file path = self.storage_path 
+        // to create a heapfile: you need to know the path of the heapfile
+        // you can record the heapfile somewhere
+        // add to file with the file path = self.storage_path
         panic!("TODO milestone hs");
     }
 

@@ -1,5 +1,5 @@
-use crate::heapfile::HeapFile;
 use crate::page::PageIter;
+use crate::{heapfile::HeapFile, page::Page};
 use common::ids::{ContainerId, PageId, TransactionId};
 use std::sync::Arc;
 
@@ -39,10 +39,11 @@ impl HeapFileIterator {
 impl Iterator for HeapFileIterator {
     type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
-        // open heapfile
-        let hf = self.heapfile;
+        // open heapfile and free space map
+        let hf = &self.heapfile;
+        let fsm = hf.free_space_map.write().unwrap();
         // iterate through pages in heapfile
-        if hf.free_space_map.len().is_empty() {
+        if fsm.is_empty() {
             // if there are no pages in heapfile, return none
             return None;
         }
@@ -51,13 +52,14 @@ impl Iterator for HeapFileIterator {
             return None;
         }
         // save the page we want to iterate
-        let page_to_iterate = HeapFile::read_page_from_file(hf, self.page_index);
+        let page_to_iterate = HeapFile::read_page_from_file(&hf, self.page_index).unwrap();
         // iterate through page
         let mut p_iter = page_to_iterate.into_iter();
-        iter.next();
-        // once done iterating through page, move to the next page (self.page_index += 1)
-        if iter.next().is_none() {
+        // if dont iterating through page, move to the next page (self.page_index += 1)
+        if p_iter.next().is_none() {
             self.page_index += 1;
         }
+        // return the page's next record
+        return p_iter.next();
     }
 }
