@@ -28,9 +28,8 @@ use std::sync::{Arc, Mutex, RwLock};
 // "free space" vector.
 //*********************************************************************************
 pub(crate) struct HeapFile {
-    pub hf_file: Arc<RwLock<File>>,
+    pub hf_file_path: Arc<RwLock<PathBuf>>,
     pub free_space_map: Arc<RwLock<Vec<u16>>>,
-    //  pub tot_num_of_pages: u16,
     pub read_count: AtomicU16,
     pub write_count: AtomicU16,
 }
@@ -55,25 +54,41 @@ impl HeapFile {
                 )))
             }
         };
-
-        // TODO milestone hs
-        let f = file;
-        let f_lock = Arc::new(RwLock::new(f));
+        // create new HeapFile struct
+        let fp = file_path;
+        let fp_lock = Arc::new(RwLock::new(fp));
         let fsm = Vec::new();
         let fsm_lock = Arc::new(RwLock::new(fsm));
         Ok(HeapFile {
-            hf_file: f_lock,
+            hf_file_path: fp_lock,
             free_space_map: fsm_lock,
-            //   tot_num_of_pages: 0,
             read_count: AtomicU16::new(0),
             write_count: AtomicU16::new(0),
         })
     }
+
+    /// Utility function: returns a heapfile struct given its file path & free space map
+    pub fn returns_heapfile_from_filepath_and_fsm(fp: PathBuf, fsm: Vec<u16>) -> HeapFile {
+        println!("recreated heapfile (FSM)1: {:?}", fsm);
+        let recreated_heapfile = HeapFile {
+            hf_file_path: Arc::new(RwLock::new(fp)),
+            free_space_map: Arc::new(RwLock::new(fsm)),
+            read_count: AtomicU16::new(0),
+            write_count: AtomicU16::new(0),
+        };
+        println!(
+            "recreated heapfile (FSM)2: {:?}",
+            recreated_heapfile.free_space_map
+        );
+        recreated_heapfile
+    }
+
     /// Return the number of pages for this HeapFile.
     /// Return type is PageId (alias for another type) as we cannot have more
     /// pages than PageId can hold.
     pub fn num_pages(&self) -> PageId {
-        let mut fsm = self.free_space_map.write().unwrap();
+        let mut fsm = self.free_space_map.read().unwrap();
+        println!("num_pages (in heapfile) FSM: {:?}", fsm);
         // the indexes for elements in free_space_map vector are the page ids
         if fsm.is_empty() {
             return 0;
@@ -98,8 +113,25 @@ impl HeapFile {
         }
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = pid * 4096;
+        // unlock file path
+        let mut fp_unlocked = self.hf_file_path.write().unwrap();
         // open file
-        let mut f = self.hf_file.write().unwrap();
+        let mut f = match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(fp_unlocked.clone())
+        {
+            Ok(f) => f,
+            Err(error) => {
+                return Err(CrustyError::CrustyError(format!(
+                    "Cannot open or create heap file: {} {} {:?}",
+                    fp_unlocked.clone().to_string_lossy(),
+                    error.to_string(),
+                    error
+                )))
+            }
+        };
         // move cursor to the page_offset position in the file
         f.seek(SeekFrom::Start(page_offset as u64));
         // create buffer (to read 4096 bytes)
@@ -121,19 +153,48 @@ impl HeapFile {
         {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
-        let mut fsm = self.free_space_map.write().unwrap();
-        let page_contig_space = (page.get_largest_free_contiguous_space()) as u16;
-        fsm.borrow_mut().push(page_contig_space);
+        // unlock file path
+        let mut fp_unlocked = self.hf_file_path.write().unwrap();
         // open file
-        let mut f = self.hf_file.write().unwrap();
+        let mut file = match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(fp_unlocked.clone())
+        {
+            Ok(f) => f,
+            Err(error) => {
+                return Err(CrustyError::CrustyError(format!(
+                    "Cannot open or create heap file: {} {} {:?}",
+                    fp_unlocked.clone().to_string_lossy(),
+                    error.to_string(),
+                    error
+                )))
+            }
+        };
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = page.get_page_id() * 4096;
         // move cursor to the page_offset position in the file
-        f.seek(SeekFrom::Start(page_offset as u64))?;
+        file.seek(SeekFrom::Start(page_offset as u64))?;
         // convert page to a vector of bytes
         let page_bytes: &[u8] = &Page::get_bytes(&page);
         // write/clone bytes into the heapfile
-        f.write(page_bytes);
+        file.write(page_bytes);
+
+        println!("IM HERE IN WRITE_PAGE_TO_FILE1");
+        let mut fsm = self.free_space_map.write().unwrap();
+        println!("IM HERE IN WRITE_PAGE_TO_FILE2");
+        let page_contig_space = (page.get_largest_free_contiguous_space()) as u16;
+        // check if page_id already exists in fsm then reuse it
+        fsm.push(page_contig_space);
+        println!("WRITE_PAGE_TO_FILE FSM: {:?}", fsm);
+        /*if fsm.len() as u16 <= page.get_page_id() || fsm.is_empty() {
+            fsm.push(page_contig_space);
+        } else {
+            fsm[page.get_page_id() as usize] = page_contig_space;
+        }*/
+        // drop(f);
+
         Ok(())
     }
 }

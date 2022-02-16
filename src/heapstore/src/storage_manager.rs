@@ -11,13 +11,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, RwLock};
 
 /// The StorageManager struct
 #[derive(Serialize, Deserialize)]
 pub struct StorageManager {
-    pub containers: Arc<RwLock<HashMap<ContainerId, PathBuf>>>,
+    pub containers: Arc<RwLock<HashMap<ContainerId, (PathBuf, Vec<u16>)>>>,
     /// Path to database metadata files.
     pub storage_path: String,
     is_temp: bool,
@@ -34,26 +34,37 @@ impl StorageManager {
         _perm: Permissions,
         _pin: bool,
     ) -> Option<Page> {
-        let containers_lock = self.containers.write().unwrap();
-        // iterate through containers,
-        for (key, value) in containers_lock.iter() {
-            // check if containerid == container_id
-            if key == &container_id {
-                // save that heapfile
-                let hf_file_path = value.clone();
-                let hf = HeapFile::new(hf_file_path).unwrap();
-                // check if page_id exists in heapfile
-                if hf.free_space_map.write().unwrap().is_empty() {
-                    return None;
-                }
-                if page_id > (hf.free_space_map.write().unwrap().len() - 1) as u16 {
-                    return None;
-                }
-                // if page_id exists, then read page from file & return the page
-                Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
+        let mut containers_unlock = self.containers.write().unwrap();
+        // check if given container exists
+        if containers_unlock.contains_key(&container_id) {
+            // if heapfile path corresponding with container_id exists then extract that heapfile
+            let hf_file_path = containers_unlock[&container_id].0.clone();
+            let hf_free_space_map = containers_unlock[&container_id].1.clone();
+            let hf =
+                HeapFile::returns_heapfile_from_filepath_and_fsm(hf_file_path, hf_free_space_map);
+            // check if page_id exists in heapfile
+            if hf.free_space_map.write().unwrap().is_empty() {
+                // dropping lock to fix my deadlock error!!
+                println!("get_page calling drop");
+                drop(containers_unlock);
+                return None;
             }
+            if page_id > (hf.free_space_map.write().unwrap().len() - 1) as u16 {
+                // dropping lock to fix my deadlock error!!
+                println!("get_page calling drop");
+                drop(containers_unlock);
+                return None;
+            }
+            // dropping lock to fix my deadlock error!!
+            println!("get_page calling drop");
+            drop(containers_unlock);
+            // if page_id exists, then read page from file & return the page
+            Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
         }
         // if container didn't exist, return None
+        // dropping lock to fix my deadlock error!!
+        // println!("get_page calling drop");
+        // drop(containers_lock);
         None
     }
 
@@ -64,50 +75,63 @@ impl StorageManager {
         page: Page,
         _tid: TransactionId,
     ) -> Result<(), CrustyError> {
-        let containers_lock = self.containers.write().unwrap();
+        let containers_unlock = self.containers.write().unwrap();
         // iterate through containers,
-        for (key, value) in containers_lock.iter() {
+        for (key, value) in containers_unlock.iter() {
             // check if containerid == container_id
             if key == &container_id {
                 // save that heapfile
-                let hf_file_path = value.clone();
-                let hf = HeapFile::new(hf_file_path).unwrap();
+                let hf_file_path = value.0.clone();
+                let hf_free_space_map = value.1.clone();
+                let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
+                    hf_file_path,
+                    hf_free_space_map,
+                );
+                // dropping lock to fix my deadlock error!!
+                println!("get_page calling drop");
+                drop(containers_unlock);
                 // write page to file
                 return HeapFile::write_page_to_file(&hf, page);
             }
         }
+        // dropping lock to fix my deadlock error!!
+        println!("get_page calling drop");
+        drop(containers_unlock);
         Ok(())
     }
 
     /// Get the number of pages for a container
     fn get_num_pages(&self, container_id: ContainerId) -> PageId {
-        let containers_lock = self.containers.write().unwrap();
-        // iterate through containers,
-        for (key, value) in containers_lock.iter() {
-            // check if containerid == container_id
-            if key == &container_id {
-                // save that heapfile
-                let hf_file_path = value.clone();
-                let hf = HeapFile::new(hf_file_path).unwrap();
-                // return # of pages in file
-                return HeapFile::num_pages(&hf);
-            }
-        }
-        panic!("Invalid container id!");
+        let containers_unlock = self.containers.read().unwrap();
+        // extract the heapfile corresponding with container_id
+        let hf_file_path = &containers_unlock[&container_id].0;
+        let hf_free_space_map = &containers_unlock[&container_id].1;
+        let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
+            hf_file_path.to_path_buf(),
+            hf_free_space_map.to_vec(),
+        );
+        // return # of pages in file
+        return HeapFile::num_pages(&hf);
+        // check if page_id exists in heapfile
+        //  panic!("Invalid container id!");
     }
 
     /// Test utility function for counting reads and writes served by the heap file.
     /// Can return 0,0 for invalid container_ids
     #[allow(dead_code)]
     pub(crate) fn get_hf_read_write_count(&self, container_id: ContainerId) -> (u16, u16) {
-        let containers_lock = self.containers.write().unwrap();
+        let containers_unlock = self.containers.write().unwrap();
         // iterate through containers,
-        for (key, value) in containers_lock.iter() {
+        for (key, value) in containers_unlock.iter() {
             // check if containerid == container_id
             if key == &container_id {
                 // save that heapfile
-                let hf_file_path = value.clone();
-                let hf = HeapFile::new(hf_file_path).unwrap();
+                let hf_file_path = value.0.clone();
+                let hf_free_space_map = value.1.clone();
+                let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
+                    hf_file_path,
+                    hf_free_space_map,
+                );
                 // store the read count from file
                 let write_count = hf.write_count.load(Ordering::Relaxed);
                 // store write count from file
@@ -140,7 +164,7 @@ impl StorageTrait for StorageManager {
             let mut serialized_hm_file = fs::File::open(saved_heapfile_path).unwrap();
             // deserialize the file back into a hashmap
             // let config_str = std::fs::read_to_string("testdata.json").unwrap();
-            let containers: HashMap<ContainerId, PathBuf> =
+            let containers: HashMap<ContainerId, (PathBuf, Vec<u16>)> =
                 serde_json::from_reader(serialized_hm_file).expect("cannot deserialize file");
             // recreate the SM
             let reloaded_SM = StorageManager {
@@ -152,6 +176,7 @@ impl StorageTrait for StorageManager {
         }
         // if storage path does not already exist, then no need to reload anything
         // construct a new, empty SM
+        fs::create_dir_all(storage_path.clone());
         let new_SM = StorageManager {
             containers: Arc::new(RwLock::new(HashMap::new())),
             storage_path: storage_path,
@@ -191,57 +216,210 @@ impl StorageTrait for StorageManager {
         if value.len() > PAGE_SIZE {
             panic!("Cannot handle inserting a value larger than the page size");
         }
-        let containers_lock = self.containers.write().unwrap();
-        // iterate through containers,
-        for (key, val) in containers_lock.iter() {
-            // if heapfile corresponding with container_id exists
-            if key == &container_id {
-                // save that heapfile
-                let hf_file_path = val.clone();
-                let hf = HeapFile::new(hf_file_path).unwrap();
-                let mut fsm = hf.free_space_map.write().unwrap();
-                // check hf's free space map to find first available page to insert value
-                for i in 0..(fsm.len() - 1) as u16 {
-                    let mut page_from_hf = HeapFile::read_page_from_file(&hf, i).unwrap();
-                    // if available page exists, add_value to page and update free space map
-                    if Page::add_value(&mut page_from_hf, &value).is_some() {
-                        let new_slot_id = Page::add_value(&mut page_from_hf, &value);
-                        fsm[i as usize] =
-                            Page::get_largest_free_contiguous_space(&page_from_hf) as u16;
-                        // create ValueID
-                        let new_value_id = ValueId {
-                            container_id: container_id,
-                            segment_id: None,
-                            page_id: serde::__private::Some(i),
-                            slot_id: new_slot_id,
-                        };
-                        // return ValueID
-                        return new_value_id;
-                    }
+        ////////////////-------------------------------------------------------------//////////////////////
+        /*let mut unlock_hashmap = self.containers.write().unwrap();
+
+        let curr_file_path_hf = unlock_hashmap.clone()[&container_id].0.clone();
+        let mut new_free_space = unlock_hashmap.clone()[&container_id].1.clone();
+
+        let mut page_id_found = false;
+        let mut page_id: PageId = 0;
+
+        let mut new_file = fs::File::open(curr_file_path_hf);
+        let mut curr_file_path_hf_again = unlock_hashmap.clone()[&container_id].0.clone();
+
+        let new_hf = HeapFile {
+            hf_file_path: Arc::new(RwLock::new(curr_file_path_hf_again)),
+            free_space_map: Arc::new(RwLock::new(new_free_space.clone())),
+            read_count: AtomicU16::new(0),
+            write_count: AtomicU16::new(0),
+        };
+        for x in 0..new_free_space.len() as u16 {
+            if new_free_space[x as usize] >= value.len() as u16 {
+                page_id_found = true;
+                page_id = x;
+            }
+        }
+        let mut free_space_len = new_free_space.len();
+
+        let mut res_slot_id = 0;
+        let mut read_page = Page::new(page_id);
+
+        if free_space_len > 0 {
+            let mut read_page: Page = HeapFile::read_page_from_file(&new_hf, page_id).unwrap();
+            let res_slot_id_opt = Page::add_value(&mut read_page, &value);
+            match res_slot_id_opt {
+                Some(value) => res_slot_id = value,
+                None => page_id_found = false,
+            };
+        }
+        if free_space_len == 0 {
+            page_id_found = false;
+        }
+
+        if page_id_found {
+            HeapFile::write_page_to_file(&new_hf, read_page);
+
+            let mut unlock_fsv = unlock_hashmap.clone()[&container_id].1.clone();
+            let mut lent = unlock_fsv.len();
+            let mut read_page_again = HeapFile::read_page_from_file(&new_hf, page_id).unwrap();
+            unlock_fsv[page_id as usize] =
+                Page::get_largest_free_contiguous_space(&read_page_again) as u16;
+            let mut unlock_hf_fsv = new_hf.free_space_map.write().unwrap();
+            let mut new_fsv = unlock_hf_fsv.clone();
+            new_fsv.clear();
+            for x in 0..lent {
+                new_fsv.push(unlock_fsv.len().try_into().unwrap());
+            }
+
+            drop(unlock_hf_fsv);
+            drop(unlock_hashmap);
+
+            ValueId {
+                container_id,
+                segment_id: None,
+                page_id: Some(page_id),
+                slot_id: Some(res_slot_id),
+            }
+        } else {
+            let mut new_page = Page::new(free_space_len as PageId);
+
+            let res_slot_id = Page::add_value(&mut new_page, &value).unwrap();
+            let mut new_free_space = unlock_hashmap.clone()[&container_id].1.clone();
+            let mut free_space_len_fin = 0;
+            if (new_free_space.len() <= page_id as usize) || (new_free_space.len() == 0) {
+                let mut new_free_space = &mut unlock_hashmap.get_mut(&container_id).unwrap().1;
+                new_free_space.push(
+                    Page::get_largest_free_contiguous_space(&new_page)
+                        .try_into()
+                        .unwrap(),
+                );
+                free_space_len_fin = new_free_space.len();
+            } else {
+                let mut new_free_space = &mut unlock_hashmap.get_mut(&container_id).unwrap().1;
+                new_free_space[page_id as usize] =
+                    Page::get_largest_free_contiguous_space(&new_page) as u16;
+                free_space_len_fin = new_free_space.len();
+                let mut unlock_hf_fsv = new_hf.free_space_map.write().unwrap();
+                let mut new_fsv = unlock_hf_fsv.clone();
+                new_fsv.clear();
+                for x in 0..free_space_len_fin {
+                    new_fsv.push(new_free_space[x]);
                 }
-                // if no existing available page, then write new page to hf
-                let new_page_id = fsm.len();
-                let mut new_Page = Page::new(new_page_id.try_into().unwrap());
-                let mut new_Page_clone = Page::new(new_page_id.try_into().unwrap());
-                HeapFile::write_page_to_file(&hf, new_Page);
-                // add_value to page, and update free space map
-                let new_slot_id = Page::add_value(&mut new_Page_clone, &value);
-                let new_page_free_space =
-                    Page::get_largest_free_contiguous_space(&new_Page_clone) as u16;
-                fsm.push(new_page_free_space);
+            }
+            let new_len = free_space_len_fin - 1;
+            drop(new_free_space);
+            HeapFile::write_page_to_file(&new_hf, new_page);
+            ValueId {
+                container_id,
+                segment_id: None,
+                page_id: Some(new_len as u16),
+                slot_id: Some(res_slot_id),
+            }
+        } */
+
+        ////////////////-------------------------------------------------------------//////////////////////
+        let mut containers_lock = self.containers.write().unwrap();
+        println!("IM HERE IN INSERT_VALUE1");
+        // iterate through containers,
+        println!("IM HERE IN INSERT_VALUE2");
+        // if heapfile path corresponding with container_id exists then extract that heapfile
+        let hf_file_path = containers_lock[&container_id].0.clone();
+        let mut hf_free_space_map = containers_lock[&container_id].1.clone();
+
+        println!("insert_value hs_free_space_map1: {:?}", hf_free_space_map);
+        let mut hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
+            hf_file_path.to_path_buf(),
+            hf_free_space_map.to_vec(),
+        );
+        // let mut fsm = hf.free_space_map.write().unwrap();
+        // write a function that given fsm and file packs the fsm back into file
+        // check if hf is empty (aka no pages to insert value)
+        //  if hf_free_space_map.is_empty() {
+        println!("IM HERE IN INSERT_VALUE3");
+        // if no existing available page, then write new page to hf
+        let new_page_id = hf_free_space_map.len();
+        let mut new_Page = Page::new(new_page_id.try_into().unwrap());
+        println!("IM HERE IN INSERT_VALUE4");
+        // add_value to page, and update free space map
+        let new_slot_id = Page::add_value(&mut new_Page, &value);
+        let new_page_free_space = Page::get_largest_free_contiguous_space(&new_Page) as u16;
+        //  fsm.push(new_page_free_space);
+        println!("IM HERE IN INSERT_VALUE5");
+        //  drop(fsm);
+
+        // let mut fsm = hf.free_space_map.write().unwrap();
+        HeapFile::write_page_to_file(&hf, new_Page);
+        println!("insert_value hs_free_space_map2: {:?}", hf.free_space_map);
+        println!("IM HERE IN INSERT_VALUE6");
+        // create ValueID
+        let new_value_id = ValueId {
+            container_id: container_id,
+            segment_id: None,
+            page_id: Some(new_page_id.try_into().unwrap()),
+            slot_id: new_slot_id,
+        };
+        // dropping lock to fix my deadlock error!!
+        // println!("insert_value calling drop on containers_lock & fsm");
+        //   drop(containers_lock);
+
+        // return ValueID
+        return new_value_id;
+
+        ////////////////////////////////////////////////////////////////////////////
+        // check hf's free space map to find first available page to insert value
+        /*for i in 0..(hf_free_space_map.len() - 1) as u16 {
+            let mut page_from_hf = HeapFile::read_page_from_file(&hf, i).unwrap();
+            // if available page exists, add_value to page and update free space map
+            if Page::add_value(&mut page_from_hf, &value).is_some() {
+                let new_slot_id = Page::add_value(&mut page_from_hf, &value);
+                hf_free_space_map[i as usize].borrow_mut() =
+                    Page::get_largest_free_contiguous_space(&page_from_hf) as u16;
                 // create ValueID
                 let new_value_id = ValueId {
                     container_id: container_id,
                     segment_id: None,
-                    page_id: Some(new_page_id.try_into().unwrap()),
+                    page_id: serde::__private::Some(i),
                     slot_id: new_slot_id,
                 };
+                // dropping lock to fix my deadlock error!!
+                // println!("insert_value calling drop");
+                //  drop(containers_lock);
                 // return ValueID
                 return new_value_id;
             }
-        }
+        }*/
+        //  }
+        ////////////////////////////////////////////////////////////////////////////////
+        /*let hf_file_path = containers_lock[&container_id].0.clone();
+
+        let mut hf_free_space_map = containers_lock[&container_id].1.clone();
+        println!("insert_value hs_free_space_map1: {:?}", hf_free_space_map);
+        let mut hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
+            hf_file_path.to_path_buf(),
+            hf_free_space_map.to_vec(),
+        );
+        // if no existing available page, then write new page to hf
+        let new_page_id = hf_free_space_map.len();
+        let mut new_Page = Page::new(new_page_id.try_into().unwrap());
+        let mut new_Page_clone = Page::new(new_page_id.try_into().unwrap());
+        HeapFile::write_page_to_file(&hf, new_Page);
+        // add_value to page, and update free space map
+        let new_slot_id = Page::add_value(&mut new_Page_clone, &value);
+        let new_page_free_space = Page::get_largest_free_contiguous_space(&new_Page_clone) as u16;
+        hf_free_space_map.push(new_page_free_space);
+        // create ValueID
+        let new_value_id = ValueId {
+            container_id: container_id,
+            segment_id: None,
+            page_id: Some(new_page_id.try_into().unwrap()),
+            slot_id: new_slot_id,
+        };
+        // return ValueID
+        return new_value_id;*/
+        //////////////////////////////////////////////////////////////////////
         // else panic!
-        panic!("Invalid Container ID!");
+        // panic!("Invalid Container ID!");
     }
 
     /// Insert some bytes into a container for vector of values (e.g. record).
@@ -271,16 +449,20 @@ impl StorageTrait for StorageManager {
         let mut containers_lock = self.containers.write().unwrap();
         if containers_lock.contains_key(&container_id) {
             // extract heapfile's file path from hashmap
-            let hf_file_path = containers_lock.borrow_mut().get(&container_id).unwrap();
-            // contruct the heapfile from given container_id & hf_file_path
-            let hf = HeapFile::new(hf_file_path.to_path_buf()).unwrap();
-            let fsm = hf.free_space_map.write().unwrap();
+            let hf_file_path = containers_lock[&container_id].0.clone();
+            let hf_free_space_map = containers_lock[&container_id].1.clone();
+            let hf =
+                HeapFile::returns_heapfile_from_filepath_and_fsm(hf_file_path, hf_free_space_map);
+            let mut fsm = hf.free_space_map.write().unwrap();
             // check if page with given page id exists & extract
             if page_id <= (fsm.len() - 1) as u16 {
                 // extract page with given page_id
                 let mut extracted_page = HeapFile::read_page_from_file(&hf, page_id).unwrap();
                 // delete_value() on page for given slot_id if the corresponding record exists
                 Page::delete_value(&mut extracted_page, slot_id);
+                // dropping lock to fix my deadlock error!!
+                println!("delete_value calling drop");
+                drop(containers_lock);
                 // done
                 return Ok(());
             }
@@ -330,16 +512,25 @@ impl StorageTrait for StorageManager {
         let mut new_heapfile_path = PathBuf::new();
         new_heapfile_path.push(&self.storage_path);
         new_heapfile_path.push("hf_path.hf");
+        // construct new empty free space map
+        let mut free_space_map = Vec::new();
         // if container already has container id then don't add container id again
         if containers.contains_key(&container_id) {
             debug!(
                 "memstore::create_container container_id: {:?} already exists",
                 &container_id
             );
+            // dropping lock to fix my deadlock error!!
+            println!("create_container calling drop");
+            drop(containers);
             return Ok(());
         }
         // else, insert new heapfile (value) with given container_id (key)
-        containers.insert(container_id, new_heapfile_path);
+
+        containers.insert(container_id, (new_heapfile_path, free_space_map));
+        // dropping lock to fix my deadlock error!!
+        println!("create_container calling drop");
+        drop(containers);
         Ok(())
     }
 
@@ -357,13 +548,26 @@ impl StorageTrait for StorageManager {
     /// Remove the container and all stored values in the container.
     /// If the container is persisted remove the underlying files
     fn remove_container(&self, container_id: ContainerId) -> Result<(), CrustyError> {
-        // remove container id from hashmap
-        let mut hm_container_id_lock = self.containers.write().unwrap();
-        hm_container_id_lock.remove(&container_id);
+        /*let mut containers_lock = self.containers.write().unwrap();
+        if containers_lock.contains_key(&container_id) {
+            // extract heapfile's file path from hashmap
+            let hf_file_path = containers_lock[&container_id].0.clone();
+            let hf_free_space_map = containers_lock[&container_id].1.clone();
+            let hf =
+                HeapFile::returns_heapfile_from_filepath_and_fsm(hf_file_path, hf_free_space_map);
+            let mut fsm = hf.free_space_map.write().unwrap(); */
         // delete the heapfile w associated container id
-        let hf_file_path = hm_container_id_lock.remove(&container_id).unwrap();
-        // removes file given its file path...
+        let mut containers_unlock = self.containers.write().unwrap();
+        let hf_file_path = containers_unlock[&container_id].0.clone();
         fs::remove_file(hf_file_path);
+        // remove the tuple value associated with container id key
+        containers_unlock.remove(&container_id);
+        // remove container id from hashmap
+        // let mut hm_container_id_lock = self.containers.write().unwrap();
+        // hm_container_id_lock.remove(&container_id);
+        // dropping lock to fix my deadlock error!!
+        println!("remove_container calling drop");
+        drop(containers_unlock);
         Ok(())
     }
 
@@ -376,17 +580,20 @@ impl StorageTrait for StorageManager {
     ) -> Self::ValIterator {
         // find the heapfile associated with container_id that's stored in ValueID
         let mut containers_lock = self.containers.write().unwrap();
-        if containers_lock.contains_key(&container_id) {
-            // extract heapfile's file path from hashmap
-            let hf_file_path = containers_lock.borrow_mut().get(&container_id).unwrap();
-            // contruct the heapfile from given container_id & hf_file_path
-            let mut hf = HeapFile::new(hf_file_path.to_path_buf()).unwrap();
-            let mut arc_hf = Arc::new(hf);
-            // return a new heapfile iterator!
-            return HeapFileIterator::new(container_id, tid, arc_hf);
-        }
+        //   if containers_lock.contains_key(&container_id) {
+        // extract heapfile's file path from hashmap
+        let hf_file_path = containers_lock[&container_id].0.clone();
+        let hf_free_space_map = containers_lock[&container_id].1.clone();
+        let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(hf_file_path, hf_free_space_map);
+        let mut arc_hf = Arc::new(hf);
+        // dropping lock to fix my deadlock error!!
+        println!("get_iterator calling drop");
+        drop(containers_lock);
+        // return a new heapfile iterator!
+        return HeapFileIterator::new(container_id, tid, arc_hf);
+        //  }
         // if container id is invalid, then panic!
-        panic!("Invaid container id!");
+        // panic!("Invaid container id!");
     }
 
     /// Get the data for a particular ValueId. Error if does not exists
@@ -397,28 +604,26 @@ impl StorageTrait for StorageManager {
         perm: Permissions,
     ) -> Result<Vec<u8>, CrustyError> {
         // first check if container id exists
-        let mut containers_lock = self.containers.write().unwrap();
+        let mut containers_unlock = self.containers.write().unwrap();
         let container_id = id.container_id;
-        if containers_lock.contains_key(&container_id) {
-            // extract heapfile from hashmap
-            // extract heapfile's file path from hashmap
-            let hf_file_path = containers_lock.borrow_mut().get(&container_id).unwrap();
-            // contruct the heapfile from given container_id & hf_file_path
-            let mut hf = HeapFile::new(hf_file_path.to_path_buf()).unwrap();
-            // read page from hf (returns Crusty Error if doesn't exist)
-            let page_id = id.page_id.unwrap();
-            let mut page_read = HeapFile::read_page_from_file(&hf, page_id).unwrap();
-            // get value from page with given slot id
-            let slot_id = id.slot_id.unwrap();
-            let val = Page::get_value(&page_read, slot_id);
-            // convert val from Option<> to Result<> type
-            return Option::ok_or(
-                val,
-                CrustyError::ValidationError("Invalid value id".to_string()),
-            );
-        } else {
-            panic!("invalid container id!")
-        }
+        //  if containers_unlock.contains_key(&container_id) {
+        // extract heapfile from hashmap
+        // extract heapfile's file path from hashmap
+        let hf_file_path = containers_unlock[&container_id].0.clone();
+        let hf_free_space_map = containers_unlock[&container_id].1.clone();
+        let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(hf_file_path, hf_free_space_map);
+        // read page from hf (returns Crusty Error if doesn't exist)
+        let page_id = id.page_id.unwrap();
+        let mut page_read = HeapFile::read_page_from_file(&hf, page_id).unwrap();
+        // get value from page with given slot id
+        let slot_id = id.slot_id.unwrap();
+        let val = Page::get_value(&page_read, slot_id);
+        // convert val from Option<> to Result<> type
+        return Option::ok_or(
+            val,
+            CrustyError::ValidationError("Invalid value id".to_string()),
+        );
+        //  }
     }
 
     /// Notify the storage manager that the transaction is finished so that any held resources can be released.
@@ -428,18 +633,16 @@ impl StorageTrait for StorageManager {
 
     /// Testing utility to reset all state associated the storage manager.
     fn reset(&self) -> Result<(), CrustyError> {
-        // just reset the SM hashmap. Everything else stays the same.
-        let mut containers_lock = self.containers.write().unwrap();
-        containers_lock.clear();
         // if SM is temp, then delete the temp file
-        if self.is_temp {
-            // get the file path of the temp file
-            let mut temp_file_path = PathBuf::new();
-            temp_file_path.push(&self.storage_path.clone());
-            temp_file_path.push("hf_path.hf");
-            // remove the file!
-            fs::remove_file(temp_file_path);
-        }
+        let mut containers_unlock = self.containers.write().unwrap();
+        /* if self.is_temp {
+             // extract heapfile's temp file from hashmap
+             let temp_hf_file_path = containers_unlock[].0.clone();
+             // remove the file!
+            fs::remove_file(temp_hf_file_path);
+        } */
+        // just reset the SM hashmap. Everything else stays the same.
+        containers_unlock.clear();
         Ok(())
     }
 
@@ -538,7 +741,7 @@ impl Drop for StorageManager {
     /// Shutdown the storage manager. Can call be called by shutdown. Should be safe to call multiple times.
     /// If temp, this should remove all stored files.
     fn drop(&mut self) {
-
+        self.shutdown()
         //  panic!("TODO milestone hs");
     }
 }
@@ -556,15 +759,21 @@ mod test {
         init();
         let sm = StorageManager::new_test_sm();
         let cid = 1;
+        println!("I'M HERE IN HS_SM_A_INSERT1");
         sm.create_table(cid);
-
+        println!("I'M HERE IN HS_SM_A_INSERT2");
         let bytes = get_random_byte_vec(40);
+        println!("I'M HERE IN HS_SM_A_INSERT3");
         let tid = TransactionId::new();
-
+        println!("I'M HERE IN HS_SM_A_INSERT4");
         let val1 = sm.insert_value(cid, bytes.clone(), tid);
+        println!("I'M HERE IN HS_SM_A_INSERT5");
         assert_eq!(1, sm.get_num_pages(cid));
+        println!("I'M HERE IN HS_SM_A_INSERT6");
         assert_eq!(0, val1.page_id.unwrap());
+        println!("I'M HERE IN HS_SM_A_INSERT7");
         assert_eq!(0, val1.slot_id.unwrap());
+        println!("I'M HERE IN HS_SM_A_INSERT8");
 
         let p1 = sm
             .get_page(cid, 0, tid, Permissions::ReadOnly, false)

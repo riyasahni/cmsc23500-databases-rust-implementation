@@ -162,18 +162,18 @@ impl Page {
 
     /// Create a new page from the byte array.
     pub fn from_bytes(data: &[u8]) -> Self {
-        println!("data (from_bytes ) {:?}", data);
+        //  println!("data (from_bytes ) {:?}", data);
         // first deserialize all of the fixed-length data I have in my header
         let deserialized_ptr_to_end_of_free_space =
             u16::from_le_bytes(data[0..2].try_into().unwrap());
         let deserialized_ptr_to_beg_of_free_space =
             u16::from_le_bytes(data[2..4].try_into().unwrap());
-        println!(
-            "deserialized ptr to beg of free space (from_bytes ){}",
-            deserialized_ptr_to_beg_of_free_space
-        );
+        //  println!(
+        //      "deserialized ptr to beg of free space (from_bytes ){}",
+        //      deserialized_ptr_to_beg_of_free_space
+        //   );
         let deserialized_pageID = u16::from_le_bytes(data[4..6].try_into().unwrap());
-        println!("deserialized page id (from_bytes) {}", deserialized_pageID);
+        //  println!("deserialized page id (from_bytes) {}", deserialized_pageID);
         // now extract the records from vector of bytes
         let deserialized_vec_of_records = Page::return_deserialized_vec_of_records(data);
         // create data vector for page from given array of bytes
