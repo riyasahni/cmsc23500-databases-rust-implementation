@@ -1,6 +1,7 @@
 use crate::heapfile::HeapFile;
 use crate::heapfileiter::HeapFileIterator;
 use crate::page::{Header, Page};
+use common::delta_storage_trait::Value;
 use common::prelude::*;
 use common::storage_trait::StorageTrait;
 use common::testutil::gen_random_dir;
@@ -46,18 +47,18 @@ impl StorageManager {
             if hf.free_space_map.write().unwrap().is_empty() {
                 // dropping lock to fix my deadlock error!!
                 println!("get_page calling drop");
-                drop(containers_unlock);
+                //   drop(containers_unlock);
                 return None;
             }
             if page_id > (hf.free_space_map.write().unwrap().len() - 1) as u16 {
                 // dropping lock to fix my deadlock error!!
                 println!("get_page calling drop");
-                drop(containers_unlock);
+                //  drop(containers_unlock);
                 return None;
             }
             // dropping lock to fix my deadlock error!!
             println!("get_page calling drop");
-            drop(containers_unlock);
+            // drop(containers_unlock);
             // if page_id exists, then read page from file & return the page
             Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
         }
@@ -75,33 +76,6 @@ impl StorageManager {
         page: Page,
         _tid: TransactionId,
     ) -> Result<(), CrustyError> {
-        let containers_unlock = self.containers.write().unwrap();
-        // iterate through containers,
-        for (key, value) in containers_unlock.iter() {
-            // check if containerid == container_id
-            if key == &container_id {
-                // save that heapfile
-                let hf_file_path = value.0.clone();
-                let hf_free_space_map = value.1.clone();
-                let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
-                    hf_file_path,
-                    hf_free_space_map,
-                );
-                // dropping lock to fix my deadlock error!!
-                println!("get_page calling drop");
-                drop(containers_unlock);
-                // write page to file
-                return HeapFile::write_page_to_file(&hf, page);
-            }
-        }
-        // dropping lock to fix my deadlock error!!
-        println!("get_page calling drop");
-        drop(containers_unlock);
-        Ok(())
-    }
-
-    /// Get the number of pages for a container
-    fn get_num_pages(&self, container_id: ContainerId) -> PageId {
         let containers_unlock = self.containers.read().unwrap();
         // extract the heapfile corresponding with container_id
         let hf_file_path = &containers_unlock[&container_id].0;
@@ -110,10 +84,28 @@ impl StorageManager {
             hf_file_path.to_path_buf(),
             hf_free_space_map.to_vec(),
         );
+
+        // write page to file
+        HeapFile::write_page_to_file(&hf, page)
+    }
+
+    /// Get the number of pages for a container
+    fn get_num_pages(&self, container_id: ContainerId) -> PageId {
+        let containers_unlock = self.containers.read().unwrap();
+        // extract the heapfile corresponding with container_id
+        //let hf_file_path = &containers_unlock[&container_id].0;
+        let hf_free_space_map = containers_unlock[&container_id].1.clone();
+        println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
+        return hf_free_space_map.len() as u16;
+
+        // let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
+        //     hf_file_path.to_path_buf(),
+        //     hf_free_space_map.to_vec(),
+        // );
         // return # of pages in file
-        return HeapFile::num_pages(&hf);
+        //  HeapFile::num_pages(&hf)
         // check if page_id exists in heapfile
-        //  panic!("Invalid container id!");
+        //  panic!("Invalid container id!");*/
     }
 
     /// Test utility function for counting reads and writes served by the heap file.
@@ -216,6 +208,7 @@ impl StorageTrait for StorageManager {
         if value.len() > PAGE_SIZE {
             panic!("Cannot handle inserting a value larger than the page size");
         }
+
         ////////////////-------------------------------------------------------------//////////////////////
         /*let mut unlock_hashmap = self.containers.write().unwrap();
 
@@ -275,12 +268,12 @@ impl StorageTrait for StorageManager {
             drop(unlock_hf_fsv);
             drop(unlock_hashmap);
 
-            ValueId {
+            return ValueId {
                 container_id,
                 segment_id: None,
                 page_id: Some(page_id),
                 slot_id: Some(res_slot_id),
-            }
+            };
         } else {
             let mut new_page = Page::new(free_space_len as PageId);
 
@@ -310,65 +303,107 @@ impl StorageTrait for StorageManager {
             let new_len = free_space_len_fin - 1;
             drop(new_free_space);
             HeapFile::write_page_to_file(&new_hf, new_page);
-            ValueId {
+            return ValueId {
                 container_id,
                 segment_id: None,
                 page_id: Some(new_len as u16),
                 slot_id: Some(res_slot_id),
-            }
-        } */
-
+            };
+        }*/
         ////////////////-------------------------------------------------------------//////////////////////
         let mut containers_lock = self.containers.write().unwrap();
-        println!("IM HERE IN INSERT_VALUE1");
-        // iterate through containers,
-        println!("IM HERE IN INSERT_VALUE2");
-        // if heapfile path corresponding with container_id exists then extract that heapfile
-        let hf_file_path = containers_lock[&container_id].0.clone();
-        let mut hf_free_space_map = containers_lock[&container_id].1.clone();
 
-        println!("insert_value hs_free_space_map1: {:?}", hf_free_space_map);
-        let mut hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
-            hf_file_path.to_path_buf(),
-            hf_free_space_map.to_vec(),
-        );
-        // let mut fsm = hf.free_space_map.write().unwrap();
-        // write a function that given fsm and file packs the fsm back into file
-        // check if hf is empty (aka no pages to insert value)
-        //  if hf_free_space_map.is_empty() {
-        println!("IM HERE IN INSERT_VALUE3");
-        // if no existing available page, then write new page to hf
-        let new_page_id = hf_free_space_map.len();
-        let mut new_Page = Page::new(new_page_id.try_into().unwrap());
-        println!("IM HERE IN INSERT_VALUE4");
-        // add_value to page, and update free space map
-        let new_slot_id = Page::add_value(&mut new_Page, &value);
-        let new_page_free_space = Page::get_largest_free_contiguous_space(&new_Page) as u16;
-        //  fsm.push(new_page_free_space);
-        println!("IM HERE IN INSERT_VALUE5");
-        //  drop(fsm);
+        // extract heapfile from containers id
+        let num_pages = self.get_num_pages(container_id);
+        /*
+        for i in 0..num_pages {
+            let mut pg =
+                Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
+            let slot_id = pg.add_value(&value);
+            if slot_id.is_none() {
+                continue;
+            }
+            self.write_page(container_id, pg, tid).unwrap();
+            return ValueId {
+                container_id,
+                segment_id: None,
+                page_id: Some(i),
+                slot_id,
+            };
+        }*/
 
-        // let mut fsm = hf.free_space_map.write().unwrap();
-        HeapFile::write_page_to_file(&hf, new_Page);
-        println!("insert_value hs_free_space_map2: {:?}", hf.free_space_map);
-        println!("IM HERE IN INSERT_VALUE6");
-        // create ValueID
-        let new_value_id = ValueId {
-            container_id: container_id,
+        let mut pg = Page::new(num_pages);
+        //   pg.add_value(&value);
+        //   self.write_page(container_id, pg, tid).unwrap();
+        ValueId {
+            container_id,
             segment_id: None,
-            page_id: Some(new_page_id.try_into().unwrap()),
-            slot_id: new_slot_id,
-        };
-        // dropping lock to fix my deadlock error!!
-        // println!("insert_value calling drop on containers_lock & fsm");
-        //   drop(containers_lock);
+            page_id: Some(0),
+            slot_id: Some(0),
+        }
 
-        // return ValueID
-        return new_value_id;
+        /*let hf = HeapFile {
+            hf_file_path: Arc::new(RwLock::new(hf_file_path.clone())),
+            free_space_map: Arc::new(RwLock::new(hf_free_space_map.clone())),
+            read_count: AtomicU16::new(0),
+            write_count: AtomicU16::new(0),
+        };
+        // check if hf is new (aka no pages to insert value)
+        if hf_free_space_map.is_empty() {
+            println!("IM HERE IN INSERT_VALUE3");
+            // if no existing available page, then write new page to hf
+            let new_page_id = 0 as u16;
+            let mut new_Page = Page::new(new_page_id);
+            // write value to new page
+            Page::add_value(&mut new_Page, &value);
+            println!("IM HERE IN INSERT_VALUE4");
+            //  let new_page_free_space = Page::get_largest_free_contiguous_space(&new_Page) as u16;
+            hf_free_space_map.push(
+                Page::get_largest_free_contiguous_space(&new_Page)
+                    .try_into()
+                    .unwrap(),
+            );
+            println!("IM HERE IN INSERT_VALUE5");
+            // let mut fsm = hf.free_space_map.write().unwrap();
+            HeapFile::write_page_to_file(&hf, new_Page);
+            println!("insert_value hs_free_space_map2: {:?}", hf.free_space_map);
+            println!("IM HERE IN INSERT_VALUE6");
+            // create ValueID
+            let new_value_id = ValueId {
+                container_id: container_id,
+                segment_id: None,
+                page_id: Some(new_page_id),
+                slot_id: Some(0),
+            };
+            // return ValueID
+            return new_value_id;
+        } else {
+            // **THIS IS WRONG**
+            ValueId {
+                container_id: container_id,
+                segment_id: None,
+                page_id: Some(9),
+                slot_id: Some(9),
+            }
+        }*/
+
+        /*
+        ////   let mut page_id_found = false;
+        let mut page_id: PageId = 0;
+
+        let mut new_file = fs::File::open(hf_file_path);
+        let mut hf_file_path_again = containers_lock.clone()[&container_id].0.clone();
+
+        let hf = HeapFile {
+            hf_file_path: Arc::new(RwLock::new(hf_file_path_again)),
+            free_space_map: Arc::new(RwLock::new(hf_free_space_map.clone())),
+            read_count: AtomicU16::new(0),
+            write_count: AtomicU16::new(0),
+        }; */
 
         ////////////////////////////////////////////////////////////////////////////
-        // check hf's free space map to find first available page to insert value
-        /*for i in 0..(hf_free_space_map.len() - 1) as u16 {
+        /*// check hf's free space map to find first available page to insert value
+        for i in 0..(hf_free_space_map.len() - 1) as u16 {
             let mut page_from_hf = HeapFile::read_page_from_file(&hf, i).unwrap();
             // if available page exists, add_value to page and update free space map
             if Page::add_value(&mut page_from_hf, &value).is_some() {
@@ -388,7 +423,7 @@ impl StorageTrait for StorageManager {
                 // return ValueID
                 return new_value_id;
             }
-        }*/
+        } */
         //  }
         ////////////////////////////////////////////////////////////////////////////////
         /*let hf_file_path = containers_lock[&container_id].0.clone();
@@ -416,10 +451,8 @@ impl StorageTrait for StorageManager {
             slot_id: new_slot_id,
         };
         // return ValueID
-        return new_value_id;*/
+        return new_value_id; */
         //////////////////////////////////////////////////////////////////////
-        // else panic!
-        // panic!("Invalid Container ID!");
     }
 
     /// Insert some bytes into a container for vector of values (e.g. record).
