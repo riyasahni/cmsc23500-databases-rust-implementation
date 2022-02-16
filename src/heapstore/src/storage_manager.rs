@@ -50,11 +50,9 @@ impl StorageManager {
             if page_id > (hf.free_space_map.write().unwrap().len() - 1) as u16 {
                 return None;
             }
-
             // if page_id exists, then read page from file & return the page
             Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
         }
-
         None
     }
 
@@ -65,37 +63,39 @@ impl StorageManager {
         page: Page,
         _tid: TransactionId,
     ) -> Result<(), CrustyError> {
-        let containers_unlock = self.containers.read().unwrap();
+        let containers_unlock = self.containers.write().unwrap();
         // extract the heapfile corresponding with container_id
-        let hf_file_path = &containers_unlock[&container_id].0;
-        let hf_free_space_map = &containers_unlock[&container_id].1;
+        let hf_file_path = &containers_unlock[&container_id].0.clone();
+        let hf_free_space_map = &containers_unlock[&container_id].1.clone();
         let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
             hf_file_path.to_path_buf(),
             hf_free_space_map.to_vec(),
         );
-
+        // let hf = HeapFile::new(hf_file_path.to_path_buf()).unwrap();
         // write page to file
         HeapFile::write_page_to_file(&hf, page)
+        //  panic!("TODO hs")
     }
 
     /// Get the number of pages for a container
     fn get_num_pages(&self, container_id: ContainerId) -> PageId {
-        return 100;
+        //return 100;
         let containers_unlock = self.containers.read().unwrap();
-        for (key, value) in &*self.containers.write().unwrap() {
-            println!("{} / {:?}", key, value);
-        }
+        //for (key, value) in &*self.containers.write().unwrap() {
+        //    println!("{} / {:?}", key, value);
+        //}
         //return -100;
         let hf_free_space_map = containers_unlock[&container_id].1.clone();
-        //println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
+        println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
         return hf_free_space_map.len() as u16;
+        panic!("TODO hs")
     }
 
     /// Test utility function for counting reads and writes served by the heap file.
     /// Can return 0,0 for invalid container_ids
     #[allow(dead_code)]
     pub(crate) fn get_hf_read_write_count(&self, container_id: ContainerId) -> (u16, u16) {
-        let containers_unlock = self.containers.write().unwrap();
+        /*let containers_unlock = self.containers.write().unwrap();
         // iterate through containers,
         for (key, value) in containers_unlock.iter() {
             // check if containerid == container_id
@@ -116,7 +116,8 @@ impl StorageManager {
             }
         }
         // return (0, 0) for invlaid container_id
-        (0, 0)
+        (0, 0) */
+        panic!("TODO hs")
     }
 }
 
@@ -159,6 +160,7 @@ impl StorageTrait for StorageManager {
         };
         // return it
         new_SM
+        //  panic!("TODO hs")
     }
 
     /// Create a new storage manager for testing. If this creates a temporary directory it should be cleaned up
@@ -171,6 +173,7 @@ impl StorageTrait for StorageManager {
         let test_SM = StorageManager::new(storage_path);
         // return test SM
         test_SM
+        // panic!("TODO hs")
     }
 
     fn get_simple_config() -> common::ContainerConfig {
@@ -294,49 +297,41 @@ impl StorageTrait for StorageManager {
             };
         }*/
         ////////////////-------------------------------------------------------------//////////////////////
-        let mut containers_lock = self.containers.write().unwrap();
 
-        // extract heapfile from containers id
-        //let mut unlock_hashmap = self.containers.write().unwrap();
-        //let curr_file_path_hf = unlock_hashmap.clone()[&container_id].0.clone();
-        //let mut new_free_space = unlock_hashmap.clone()[&container_id].1.clone();
-
-        let num_pages = self.get_num_pages(container_id);
-        //let num_pages = new_free_space.len();
-        println!("insert value: num_pages {}", num_pages);
-
-        for i in 0..num_pages {
-            //let mut pg =
-            //    Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
-            /*let slot_id = pg.add_value(&value);
+        // if it's a new heapfile, create a page
+        // first determine if there is a page with space available
+        // if yes, add the value to an existing page
+        // if no, create a new page
+        let n = self.get_num_pages(container_id);
+        for i in 0..n {
+            //debug!("loop for page id: {}", i);
+            let mut pg =
+                Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
+            let slot_id = pg.add_value(&value);
             if slot_id.is_none() {
                 continue;
             }
+
             self.write_page(container_id, pg, tid).unwrap();
             return ValueId {
                 container_id,
                 segment_id: None,
                 page_id: Some(i),
                 slot_id,
-            }; */
+            };
         }
-
-        let mut pg = Page::new(num_pages.try_into().unwrap());
+        // if page doesn't exist, then create a page and add the value
+        let mut pg = Page::new(n);
         let slot_id = pg.add_value(&value);
-        match slot_id {
-            // The division was valid
-            Some(x) => println!("slotid: {}", x),
-            // The division was invalid
-            None => println!("invalid slotid"),
-        }
-        //println!("insert value: slot_id {}", slot_id);
-        //pg.add_value(&value);
-        // self.write_page(container_id, pg, tid).unwrap();
+        pg.add_value(&value);
+
+        self.write_page(container_id, pg, tid).unwrap();
+
         ValueId {
             container_id,
             segment_id: None,
-            page_id: Some(0),
-            slot_id: Some(0),
+            page_id: Some(n),
+            slot_id,
         }
 
         /*let hf = HeapFile {
@@ -634,7 +629,7 @@ impl StorageTrait for StorageManager {
         perm: Permissions,
     ) -> Result<Vec<u8>, CrustyError> {
         // first check if container id exists
-        let mut containers_unlock = self.containers.write().unwrap();
+        let mut containers_unlock = self.containers.read().unwrap();
         let container_id = id.container_id;
         //  if containers_unlock.contains_key(&container_id) {
         // extract heapfile from hashmap
