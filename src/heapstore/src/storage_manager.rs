@@ -45,27 +45,16 @@ impl StorageManager {
                 HeapFile::returns_heapfile_from_filepath_and_fsm(hf_file_path, hf_free_space_map);
             // check if page_id exists in heapfile
             if hf.free_space_map.write().unwrap().is_empty() {
-                // dropping lock to fix my deadlock error!!
-                println!("get_page calling drop");
-                //   drop(containers_unlock);
                 return None;
             }
             if page_id > (hf.free_space_map.write().unwrap().len() - 1) as u16 {
-                // dropping lock to fix my deadlock error!!
-                println!("get_page calling drop");
-                //  drop(containers_unlock);
                 return None;
             }
-            // dropping lock to fix my deadlock error!!
-            println!("get_page calling drop");
-            // drop(containers_unlock);
+
             // if page_id exists, then read page from file & return the page
             Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
         }
-        // if container didn't exist, return None
-        // dropping lock to fix my deadlock error!!
-        // println!("get_page calling drop");
-        // drop(containers_lock);
+
         None
     }
 
@@ -91,21 +80,15 @@ impl StorageManager {
 
     /// Get the number of pages for a container
     fn get_num_pages(&self, container_id: ContainerId) -> PageId {
+        return 100;
         let containers_unlock = self.containers.read().unwrap();
-        // extract the heapfile corresponding with container_id
-        //let hf_file_path = &containers_unlock[&container_id].0;
+        for (key, value) in &*self.containers.write().unwrap() {
+            println!("{} / {:?}", key, value);
+        }
+        //return -100;
         let hf_free_space_map = containers_unlock[&container_id].1.clone();
-        println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
+        //println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
         return hf_free_space_map.len() as u16;
-
-        // let hf = HeapFile::returns_heapfile_from_filepath_and_fsm(
-        //     hf_file_path.to_path_buf(),
-        //     hf_free_space_map.to_vec(),
-        // );
-        // return # of pages in file
-        //  HeapFile::num_pages(&hf)
-        // check if page_id exists in heapfile
-        //  panic!("Invalid container id!");*/
     }
 
     /// Test utility function for counting reads and writes served by the heap file.
@@ -314,12 +297,18 @@ impl StorageTrait for StorageManager {
         let mut containers_lock = self.containers.write().unwrap();
 
         // extract heapfile from containers id
+        //let mut unlock_hashmap = self.containers.write().unwrap();
+        //let curr_file_path_hf = unlock_hashmap.clone()[&container_id].0.clone();
+        //let mut new_free_space = unlock_hashmap.clone()[&container_id].1.clone();
+
         let num_pages = self.get_num_pages(container_id);
-        /*
+        //let num_pages = new_free_space.len();
+        println!("insert value: num_pages {}", num_pages);
+
         for i in 0..num_pages {
-            let mut pg =
-                Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
-            let slot_id = pg.add_value(&value);
+            //let mut pg =
+            //    Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
+            /*let slot_id = pg.add_value(&value);
             if slot_id.is_none() {
                 continue;
             }
@@ -329,12 +318,20 @@ impl StorageTrait for StorageManager {
                 segment_id: None,
                 page_id: Some(i),
                 slot_id,
-            };
-        }*/
+            }; */
+        }
 
-        let mut pg = Page::new(num_pages);
-        //   pg.add_value(&value);
-        //   self.write_page(container_id, pg, tid).unwrap();
+        let mut pg = Page::new(num_pages.try_into().unwrap());
+        let slot_id = pg.add_value(&value);
+        match slot_id {
+            // The division was valid
+            Some(x) => println!("slotid: {}", x),
+            // The division was invalid
+            None => println!("invalid slotid"),
+        }
+        //println!("insert value: slot_id {}", slot_id);
+        //pg.add_value(&value);
+        // self.write_page(container_id, pg, tid).unwrap();
         ValueId {
             container_id,
             segment_id: None,
