@@ -9,6 +9,7 @@ use common::PAGE_SIZE;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
@@ -127,15 +128,30 @@ impl StorageTrait for StorageManager {
     /// Create a new storage manager that will use storage_path as the location to persist data
     /// (if the storage manager persists records on disk)
     fn new(storage_path: String) -> Self {
-        // CHECK IF THE STORAGE_PATH ALREADY EXISTS
-        // IF YES,
-        // THEN OPEN UP THE FILE "SM_SAVED_DATA" (EACH SAVED SERIALIZED FILE WILL HAVE THE SAME NAME
-        // BECAUSE WE KNOW THEY'LL ALL BE IN DIFFERENT DIRECTORIES)
-        // THIS FILE CONTAINS THE SERIALIZED HASHMAP BETWEEN CONTAINER IDS AND HEAPFILES
-        // I CAN JUST DESERIALIZE THIS FILE TO RECREATE THE HASHMAP
-        // POP THAT HASHMAP BACK INTO THIS SM (WITH THE GIVEN, EXISTING STORAGE_PATH)
-        // RETURN THE RECREATED SM!!
-        // ELSE, construct a new, empty SM
+        // check if storage path already exists
+        let mut storage_path_PathBuf = PathBuf::new();
+        storage_path_PathBuf.push(storage_path.clone());
+        if storage_path_PathBuf.is_dir() {
+            // get the file path for the serialized heapfile info
+            let mut saved_heapfile_path = PathBuf::new();
+            saved_heapfile_path.push(storage_path.clone());
+            saved_heapfile_path.push("serialized_hm.json");
+            // open up the serialized hf for this SM directory
+            let mut serialized_hm_file = fs::File::open(saved_heapfile_path).unwrap();
+            // deserialize the file back into a hashmap
+            // let config_str = std::fs::read_to_string("testdata.json").unwrap();
+            let containers: HashMap<ContainerId, PathBuf> =
+                serde_json::from_reader(serialized_hm_file).expect("cannot deserialize file");
+            // recreate the SM
+            let reloaded_SM = StorageManager {
+                containers: Arc::new(RwLock::new(containers)),
+                storage_path: storage_path,
+                is_temp: false,
+            };
+            return reloaded_SM;
+        }
+        // if storage path does not already exist, then no need to reload anything
+        // construct a new, empty SM
         let new_SM = StorageManager {
             containers: Arc::new(RwLock::new(HashMap::new())),
             storage_path: storage_path,
@@ -349,7 +365,6 @@ impl StorageTrait for StorageManager {
         // removes file given its file path...
         fs::remove_file(hf_file_path);
         Ok(())
-        //  panic!("TODO milestone hs");
     }
 
     /// Get an iterator that returns all valid records
@@ -359,10 +374,19 @@ impl StorageTrait for StorageManager {
         tid: TransactionId,
         _perm: Permissions,
     ) -> Self::ValIterator {
-        panic!("TODO milestone hs");
-        // map file to num of pages
-        // get me first page now on this page let me call iterator for this page
-        //
+        // find the heapfile associated with container_id that's stored in ValueID
+        let mut containers_lock = self.containers.write().unwrap();
+        if containers_lock.contains_key(&container_id) {
+            // extract heapfile's file path from hashmap
+            let hf_file_path = containers_lock.borrow_mut().get(&container_id).unwrap();
+            // contruct the heapfile from given container_id & hf_file_path
+            let mut hf = HeapFile::new(hf_file_path.to_path_buf()).unwrap();
+            let mut arc_hf = Arc::new(hf);
+            // return a new heapfile iterator!
+            return HeapFileIterator::new(container_id, tid, arc_hf);
+        }
+        // if container id is invalid, then panic!
+        panic!("Invaid container id!");
     }
 
     /// Get the data for a particular ValueId. Error if does not exists
@@ -372,7 +396,29 @@ impl StorageTrait for StorageManager {
         tid: TransactionId,
         perm: Permissions,
     ) -> Result<Vec<u8>, CrustyError> {
-        panic!("TODO milestone hs");
+        // first check if container id exists
+        let mut containers_lock = self.containers.write().unwrap();
+        let container_id = id.container_id;
+        if containers_lock.contains_key(&container_id) {
+            // extract heapfile from hashmap
+            // extract heapfile's file path from hashmap
+            let hf_file_path = containers_lock.borrow_mut().get(&container_id).unwrap();
+            // contruct the heapfile from given container_id & hf_file_path
+            let mut hf = HeapFile::new(hf_file_path.to_path_buf()).unwrap();
+            // read page from hf (returns Crusty Error if doesn't exist)
+            let page_id = id.page_id.unwrap();
+            let mut page_read = HeapFile::read_page_from_file(&hf, page_id).unwrap();
+            // get value from page with given slot id
+            let slot_id = id.slot_id.unwrap();
+            let val = Page::get_value(&page_read, slot_id);
+            // convert val from Option<> to Result<> type
+            return Option::ok_or(
+                val,
+                CrustyError::ValidationError("Invalid value id".to_string()),
+            );
+        } else {
+            panic!("invalid container id!")
+        }
     }
 
     /// Notify the storage manager that the transaction is finished so that any held resources can be released.
@@ -382,9 +428,19 @@ impl StorageTrait for StorageManager {
 
     /// Testing utility to reset all state associated the storage manager.
     fn reset(&self) -> Result<(), CrustyError> {
-        // just creates a brand new, empty SM...
-
-        panic!("TODO milestone hs");
+        // just reset the SM hashmap. Everything else stays the same.
+        let mut containers_lock = self.containers.write().unwrap();
+        containers_lock.clear();
+        // if SM is temp, then delete the temp file
+        if self.is_temp {
+            // get the file path of the temp file
+            let mut temp_file_path = PathBuf::new();
+            temp_file_path.push(&self.storage_path.clone());
+            temp_file_path.push("hf_path.hf");
+            // remove the file!
+            fs::remove_file(temp_file_path);
+        }
+        Ok(())
     }
 
     /// If there is a buffer pool or cache it should be cleared/reset.
@@ -399,12 +455,22 @@ impl StorageTrait for StorageManager {
     /// that can be used to create a HeapFile object pointing to the same data. You don't need to
     /// worry about recreating read_count or write_count.
     fn shutdown(&self) {
-        // let mut file = File::create(file path + "foo.txt")?;
-        // serialize contents of hashmap
-        // to create a heapfile: you need to know the path of the heapfile
-        // you can record the heapfile somewhere
-        // add to file with the file path = self.storage_path
-        panic!("TODO milestone hs");
+        // first check if the SM is temporary, and if it's not then serialize & store its contents
+        if !self.is_temp {
+            // serialize the SM's hashmap w container id & heapfile maps
+            let containers_lock = self.containers.write().unwrap();
+            let serialized_hm =
+                serde_json::to_string(&*containers_lock).expect("failed to serialize");
+            // create file path for the file that I will write serialized_hm into
+            let mut new_heapfile_path = PathBuf::new();
+            new_heapfile_path.push(&self.storage_path.clone());
+            new_heapfile_path.push("serialized_hm.json");
+            let mut serialized_hm_file = fs::File::create(new_heapfile_path).unwrap();
+            // write the serialized info into the file
+            serialized_hm_file.write(serialized_hm.as_bytes());
+        }
+        // then just remove all stored files
+        self.reset();
     }
 
     fn import_csv(
@@ -472,7 +538,8 @@ impl Drop for StorageManager {
     /// Shutdown the storage manager. Can call be called by shutdown. Should be safe to call multiple times.
     /// If temp, this should remove all stored files.
     fn drop(&mut self) {
-        panic!("TODO milestone hs");
+
+        //  panic!("TODO milestone hs");
     }
 }
 
