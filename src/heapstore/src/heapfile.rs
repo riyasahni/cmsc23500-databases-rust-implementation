@@ -1,4 +1,4 @@
-use crate::page::Page;
+use crate::page::{Header, Page};
 use common::ids::PageId;
 use common::{CrustyError, PAGE_SIZE};
 use std::fs::{File, OpenOptions};
@@ -29,6 +29,7 @@ use std::sync::{Arc, Mutex, RwLock};
 //*********************************************************************************
 pub(crate) struct HeapFile {
     pub hf_file_path: PathBuf,
+    pub hf_file_object: Arc<RwLock<File>>,
     pub free_space_map: Arc<RwLock<Vec<u16>>>,
     pub read_count: AtomicU16,
     pub write_count: AtomicU16,
@@ -59,17 +60,20 @@ impl HeapFile {
         let fsm_lock = Arc::new(RwLock::new(fsm));
         Ok(HeapFile {
             hf_file_path: file_path,
+            hf_file_object: Arc::new(RwLock::new(file)),
             free_space_map: fsm_lock,
             read_count: AtomicU16::new(0),
             write_count: AtomicU16::new(0),
         })
     }
-
+    /*
     /// Utility function: returns a heapfile struct given its file path & free space map
     pub fn returns_heapfile_from_filepath_and_fsm(fp: PathBuf, fsm: Vec<u16>) -> HeapFile {
         println!("recreated heapfile (FSM)1: {:?}", fsm);
+        let file_object = HeapFile::new(fp).unwrap().hf_file_object;
         let recreated_heapfile = HeapFile {
             hf_file_path: fp,
+            hf_file_object: file_object,
             free_space_map: Arc::new(RwLock::new(fsm)),
             read_count: AtomicU16::new(0),
             write_count: AtomicU16::new(0),
@@ -79,7 +83,7 @@ impl HeapFile {
             recreated_heapfile.free_space_map
         );
         recreated_heapfile
-    }
+    }*/
 
     /// Return the number of pages for this HeapFile.
     /// Return type is PageId (alias for another type) as we cannot have more
@@ -111,25 +115,8 @@ impl HeapFile {
         }
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = pid * 4096;
-        // unlock file path
-        let mut fp = &self.hf_file_path;
         // open file
-        let mut f = match OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(fp.clone())
-        {
-            Ok(f) => f,
-            Err(error) => {
-                return Err(CrustyError::CrustyError(format!(
-                    "Cannot open or create heap file: {} {} {:?}",
-                    fp.clone().to_string_lossy(),
-                    error.to_string(),
-                    error
-                )))
-            }
-        };
+        let mut f = &mut self.hf_file_object.write().unwrap();
         // move cursor to the page_offset position in the file
         f.seek(SeekFrom::Start(page_offset as u64));
         // create buffer (to read 4096 bytes)
@@ -151,25 +138,9 @@ impl HeapFile {
         {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
-        // unlock file path
-        let mut fp = &self.hf_file_path;
+
         // open file
-        let mut file = match OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(fp.clone())
-        {
-            Ok(f) => f,
-            Err(error) => {
-                return Err(CrustyError::CrustyError(format!(
-                    "Cannot open or create heap file: {} {} {:?}",
-                    fp.clone().to_string_lossy(),
-                    error.to_string(),
-                    error
-                )))
-            }
-        };
+        let mut file = &mut self.hf_file_object.write().unwrap();
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = page.get_page_id() * 4096;
         // move cursor to the page_offset position in the file
@@ -184,13 +155,13 @@ impl HeapFile {
         println!("IM HERE IN WRITE_PAGE_TO_FILE2");
         let page_contig_space = (page.get_largest_free_contiguous_space()) as u16;
         // check if page_id already exists in fsm then reuse it
-        //fsm.push(page_contig_space);
+        fsm.push(page_contig_space);
         println!("WRITE_PAGE_TO_FILE FSM: {:?}", fsm);
-        if fsm.len() as u16 <= page.get_page_id() || fsm.is_empty() {
+        /*if fsm.len() as u16 <= page.get_page_id() || fsm.is_empty() {
             fsm.push(page_contig_space);
         } else {
             fsm[page.get_page_id() as usize] = page_contig_space;
-        }
+        }*/
         // drop(f);
 
         Ok(())
