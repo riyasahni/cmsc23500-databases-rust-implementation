@@ -51,14 +51,20 @@ impl StorageManager {
                 print!("get_page is poisoned")
             }
             if hf.free_space_map.read().unwrap().is_empty() {
+                //   drop(hf.free_space_map);
+                drop(containers_unlock);
                 return None;
             }
             if page_id > (hf.free_space_map.read().unwrap().len() - 1) as u16 {
+                //    drop(hf.free_space_map);
+                drop(containers_unlock);
                 return None;
             }
             // if page_id exists, then read page from file & return the page
-            Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
+            //drop(containers_unlock);
+            return Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
         }
+        drop(containers_unlock);
         None
         //  panic!("TODO milestone hs");
     }
@@ -86,6 +92,7 @@ impl StorageManager {
         let num_pages = HeapFile::num_pages(hf);
 
         //  println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
+        drop(containers_unlock);
         num_pages
         //   panic!("TODO milestone hs");
     }
@@ -97,6 +104,7 @@ impl StorageManager {
         let containers_unlock = self.containers.read().unwrap();
 
         if !containers_unlock.contains_key(&container_id) {
+            drop(containers_unlock);
             return (0, 0);
         }
 
@@ -106,6 +114,7 @@ impl StorageManager {
         let read_count = hf.read_count.load(Ordering::Relaxed);
 
         // return
+        drop(containers_unlock);
         return (read_count, write_count);
         //  panic!("TODO milestone hs");
     }
@@ -159,14 +168,22 @@ impl StorageTrait for StorageManager {
     /// Create a new storage manager for testing. If this creates a temporary directory it should be cleaned up
     /// when it leaves scope.
     fn new_test_sm() -> Self {
-        /*
         let storage_path = gen_random_dir().to_string_lossy().to_string();
-        debug!("Making new temp storage_manager {}", storage_path);
+        /*let storage_path = fs::create_dir_all("/some/dir");
+        match storage_path {
+            Result() => {
+                let path = storage_path.to_string();
+                let test_SM = StorageManager::new(path);
+                // return test SM
+                return test_SM;
+            }
+            _ => panic!("cannot make temp SM"),
+        }*/
+        //    let storage_path_str =
+        //debug!("Making new temp storage_manager {}", storage_path);
         // use new() and storage_path to make test SM
-        let test_SM = StorageManager::new(storage_path);
-        // return test SM
-        test_SM*/
-        panic!("TODO milestone hs");
+        StorageManager::new(storage_path)
+        //  panic!("TODO milestone hs");
     }
 
     fn get_simple_config() -> common::ContainerConfig {
@@ -187,56 +204,46 @@ impl StorageTrait for StorageManager {
         if value.len() > PAGE_SIZE {
             panic!("Cannot handle inserting a value larger than the page size");
         }
-        let containers_unlock = self.containers.write().unwrap();
-        let hf = containers_unlock.get(&container_id).unwrap();
-        let mut fsm = hf.free_space_map.write().unwrap();
-
-        // if it's a new heapfile, create a new page
-        // insert record into new page
-        // insert new page into heapfile
         let num_pages = self.get_num_pages(container_id);
 
-        if num_pages == 0 {
-            let mut new_page = Page::new(0);
-            let mut slot_id = new_page.add_value(&value);
-            new_page.add_value(&value);
-            self.write_page(container_id, new_page, tid);
+        // sift through pages in heapfile
+        for i in 0..num_pages {
+            if num_pages == 0 {
+                continue;
+            }
+            // if an existing page has space for record, insert it
 
+            let mut page =
+                Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
+
+            //  println!("record_id1: {}", page.add_value(&value).unwrap());
+            let record_id = page.add_value(&value);
+
+            // update free space map
+            let containers_unlock = self.containers.write().unwrap();
+            let hf = containers_unlock.get(&container_id).unwrap();
+            let mut fsm = hf.free_space_map.write().unwrap();
+            fsm[(num_pages - 1) as usize] = page.get_largest_free_contiguous_space() as u16;
+            drop(fsm);
+            drop(containers_unlock);
+
+            // check again that value was added to page
+            if record_id.is_none() {
+                continue;
+            }
+            self.write_page(container_id, page, tid);
+            //self.write_page(container_id, page, tid);
             return ValueId {
                 container_id,
                 segment_id: None,
-                page_id: Some(0),
-                slot_id,
+                page_id: Some(i),
+                slot_id: record_id,
             };
         }
 
-        // sift through pages in heapfile
-        for i in 0..(num_pages - 1) {
-            // if an existing page has space for record, insert it
-            if fsm[i as usize] >= value.len() as u16 {
-                let mut page =
-                    Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false)
-                        .unwrap();
-                let record_id = page.add_value(&value);
-                // check again that value was added to page
-                if record_id.is_none() {
-                    continue;
-                }
-                self.write_page(container_id, page, tid);
-                return ValueId {
-                    container_id,
-                    segment_id: None,
-                    page_id: Some(i),
-                    slot_id: record_id,
-                };
-            }
-        }
-
-        // if there was no space in existing pages, then add new page to heapfile
-        // insert record into the new page
         let mut new_page = Page::new(num_pages);
         let mut slot_id = new_page.add_value(&value);
-        new_page.add_value(&value);
+
         self.write_page(container_id, new_page, tid);
 
         return ValueId {
@@ -329,7 +336,7 @@ impl StorageTrait for StorageManager {
         _container_type: common::ids::StateType,
         _dependencies: Option<Vec<ContainerId>>,
     ) -> Result<(), CrustyError> {
-        /*// unlock containers field
+        // unlock containers field
         let mut containers = self.containers.write().unwrap();
         // construct the new heapfile
         let mut hf_file_path = PathBuf::new();
@@ -351,8 +358,8 @@ impl StorageTrait for StorageManager {
         // else, insert new heapfile (value) with given container_id (key)
         containers.insert(container_id, new_hf);
 
-        Ok(())*/
-        panic!("TODO milestone hs");
+        Ok(())
+        // panic!("TODO milestone hs");
     }
 
     /// A wrapper function to call create container
@@ -457,18 +464,18 @@ impl StorageTrait for StorageManager {
 
     /// Testing utility to reset all state associated the storage manager.
     fn reset(&self) -> Result<(), CrustyError> {
-        /*// if SM is temp, then delete the temp file
-        let mut containers_unlock = self.containers.write().unwrap();
-        if self.is_temp {
+        // if SM is temp, then delete the temp file
+        // let mut containers_unlock = self.containers.write().unwrap();
+        /*if self.is_temp {
             // extract heapfile's temp file from hashmap
-            let temp_hf_file_path = containers_unlock.get(self.);
+            let temp_hf_file_path = containers_unlock.get();
             // remove the file!
             fs::remove_file(temp_hf_file_path);
-        }
+        }*/
         // just reset the SM hashmap. Everything else stays the same.
-        containers_unlock.clear();
-        Ok(())*/
-        panic!("TODO milestone hs");
+        //  containers_unlock.clear();
+        Ok(())
+        //  panic!("TODO milestone hs");
     }
 
     /// If there is a buffer pool or cache it should be cleared/reset.
@@ -497,9 +504,9 @@ impl StorageTrait for StorageManager {
             // write the serialized info into the file
             serialized_hm_file.write(serialized_hm.as_bytes());
         }
-        // then just remove all stored files
-        self.reset();*/
-        panic!("TODO milestone hs");
+        // then just remove all stored files*/
+        self.reset();
+        //panic!("TODO milestone hs");
     }
 
     fn import_csv(
@@ -567,8 +574,8 @@ impl Drop for StorageManager {
     /// Shutdown the storage manager. Can call be called by shutdown. Should be safe to call multiple times.
     /// If temp, this should remove all stored files.
     fn drop(&mut self) {
-        //  self.shutdown()
-        panic!("TODO milestone hs");
+        self.shutdown()
+        // panic!("TODO milestone hs");
     }
 }
 
@@ -585,31 +592,21 @@ mod test {
         init();
         let sm = StorageManager::new_test_sm();
         let cid = 1;
-        println!("I'M HERE IN HS_SM_A_INSERT1");
         sm.create_table(cid);
-        println!("I'M HERE IN HS_SM_A_INSERT2");
         let bytes = get_random_byte_vec(40);
-        println!("I'M HERE IN HS_SM_A_INSERT3");
         let tid = TransactionId::new();
-        println!("I'M HERE IN HS_SM_A_INSERT4");
         let val1 = sm.insert_value(cid, bytes.clone(), tid);
-        println!("I'M HERE IN HS_SM_A_INSERT5");
         assert_eq!(1, sm.get_num_pages(cid));
-        println!("I'M HERE IN HS_SM_A_INSERT6");
         assert_eq!(0, val1.page_id.unwrap());
-        println!("I'M HERE IN HS_SM_A_INSERT7");
         assert_eq!(0, val1.slot_id.unwrap());
-        println!("I'M HERE IN HS_SM_A_INSERT8");
 
         let p1 = sm
             .get_page(cid, 0, tid, Permissions::ReadOnly, false)
             .unwrap();
-
         let val2 = sm.insert_value(cid, bytes, tid);
         assert_eq!(1, sm.get_num_pages(cid));
         assert_eq!(0, val2.page_id.unwrap());
         assert_eq!(1, val2.slot_id.unwrap());
-
         let p2 = sm
             .get_page(cid, 0, tid, Permissions::ReadOnly, false)
             .unwrap();

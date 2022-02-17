@@ -90,12 +90,13 @@ impl HeapFile {
     /// pages than PageId can hold.
     pub fn num_pages(&self) -> PageId {
         let mut fsm = self.free_space_map.read().unwrap();
-        println!("num_pages (in heapfile) FSM: {:?}", fsm);
         // the indexes for elements in free_space_map vector are the page ids
         if fsm.is_empty() {
+            drop(fsm);
             return 0;
         } else {
             let max_page_id = fsm.len() as u16;
+            drop(fsm);
             max_page_id
         }
     }
@@ -127,6 +128,7 @@ impl HeapFile {
         // use "from_bytes" function to convert bytes into full page
         let final_page = Page::from_bytes(&full_read_page);
         // return page
+        drop(f);
         Ok(final_page)
     }
 
@@ -149,19 +151,14 @@ impl HeapFile {
         let page_bytes: &[u8] = &Page::get_bytes(&page);
         // write/clone bytes into the heapfile
         file.write(page_bytes);
-
-        println!("IM HERE IN WRITE_PAGE_TO_FILE1");
         let mut fsm = self.free_space_map.write().unwrap();
-        println!("IM HERE IN WRITE_PAGE_TO_FILE2");
         let page_contig_space = (page.get_largest_free_contiguous_space()) as u16;
         // check if page_id already exists in fsm then reuse it
-        fsm.push(page_contig_space);
-        println!("WRITE_PAGE_TO_FILE FSM: {:?}", fsm);
-        /*if fsm.len() as u16 <= page.get_page_id() || fsm.is_empty() {
+        if fsm.len() as u16 <= page.get_page_id() || fsm.is_empty() {
             fsm.push(page_contig_space);
         } else {
             fsm[page.get_page_id() as usize] = page_contig_space;
-        }*/
+        }
         // drop(f);
 
         Ok(())
