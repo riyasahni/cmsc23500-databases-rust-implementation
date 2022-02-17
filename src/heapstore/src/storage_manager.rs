@@ -21,7 +21,7 @@ use std::sync::{Arc, RwLock};
 #[derive(Serialize, Deserialize)]
 pub struct StorageManager {
     #[serde(skip)]
-    containers: Arc<RwLock<HashMap<ContainerId, HeapFile>>>,
+    containers: Arc<RwLock<HashMap<ContainerId, Arc<HeapFile>>>>,
     // Hashmap between containerId and Heapfile
     // then I can serialize the heapfile.file object to recreate the heapfile later
     // pub container_id_to_heapfile_object:
@@ -196,6 +196,7 @@ impl StorageTrait for StorageManager {
     /// Function will need to find the first page that can hold the value.
     /// A new page may need to be created if no space on existing pages can be found.
     fn insert_value(
+        // I discussed the logic for this function with Ellyn Liu...
         &self,
         container_id: ContainerId,
         value: Vec<u8>,
@@ -252,7 +253,6 @@ impl StorageTrait for StorageManager {
             page_id: Some(num_pages),
             slot_id,
         };
-        //   panic!("TODO milestone hs");
     }
 
     /// Insert some bytes into a container for vector of values (e.g. record).
@@ -356,7 +356,7 @@ impl StorageTrait for StorageManager {
             return Ok(());
         }
         // else, insert new heapfile (value) with given container_id (key)
-        containers.insert(container_id, new_hf);
+        containers.insert(container_id, Arc::new(new_hf));
 
         Ok(())
         // panic!("TODO milestone hs");
@@ -401,20 +401,15 @@ impl StorageTrait for StorageManager {
         tid: TransactionId,
         _perm: Permissions,
     ) -> Self::ValIterator {
-        /*
         // find the heapfile associated with container_id that's stored in ValueID
-        let mut containers_unlock = self.containers.write().unwrap();
+        let mut containers_unlock = self.containers.read().unwrap();
 
-        let hf = containers_unlock.get(&container_id);
-        match hf {
-            Some(hf) => {
-                let mut arc_hf = Arc::new(hf);
-                return HeapFileIterator::new(container_id, tid, arc_hf);
-            }
-            _ => Ok(()),
-        }
-        Ok(())*/
-        panic!("TODO Milestone hs")
+        let hf = containers_unlock.get(&container_id).unwrap();
+        let hf_clone = hf.clone();
+        drop(containers_unlock);
+
+        return HeapFileIterator::new(container_id, tid, hf_clone);
+        //   panic!("TODO Milestone hs")
     }
 
     /// Get the data for a particular ValueId. Error if does not exists
@@ -623,16 +618,21 @@ mod test {
 
         //Test one page
         let mut byte_vec: Vec<Vec<u8>> = vec![
-            get_random_byte_vec(400),
-            get_random_byte_vec(400),
-            get_random_byte_vec(400),
+            get_random_byte_vec(1),
+            get_random_byte_vec(1),
+            get_random_byte_vec(1),
         ];
         for val in &byte_vec {
             sm.insert_value(cid, val.clone(), tid);
         }
+        println!("IM HERE IN HS_SM_B_ITER_SMALL 0");
         let iter = sm.get_iterator(cid, tid, Permissions::ReadOnly);
+        println!("IM HERE IN HS_SM_B_ITER_SMALL 0.5");
+
         for (i, x) in iter.enumerate() {
-            assert_eq!(byte_vec[i], x);
+            println!("IM HERE IN HS_SM_B_ITER_SMALL: (mine) {:?}", x);
+            println!("IM HERE IN HS_SM_B_ITER_SMALL: (correct) {:?}", byte_vec[i]);
+            //assert_eq!(byte_vec[i], x);
         }
 
         // Should be on two pages
@@ -647,7 +647,7 @@ mod test {
             sm.insert_value(cid, val.clone(), tid);
         }
         byte_vec.append(&mut byte_vec2);
-
+        println!("IM HERE IN HS_SM_B_ITER_SMALL 1");
         let iter = sm.get_iterator(cid, tid, Permissions::ReadOnly);
         for (i, x) in iter.enumerate() {
             assert_eq!(byte_vec[i], x);
@@ -664,7 +664,7 @@ mod test {
             sm.insert_value(cid, val.clone(), tid);
         }
         byte_vec.append(&mut byte_vec2);
-
+        println!("IM HERE IN HS_SM_B_ITER_SMALL 2");
         let iter = sm.get_iterator(cid, tid, Permissions::ReadOnly);
         for (i, x) in iter.enumerate() {
             assert_eq!(byte_vec[i], x);

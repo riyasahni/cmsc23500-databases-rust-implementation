@@ -41,25 +41,34 @@ impl Iterator for HeapFileIterator {
     fn next(&mut self) -> Option<Self::Item> {
         // open heapfile and free space map
         let hf = &self.heapfile;
-        let fsm = hf.free_space_map.write().unwrap();
+        let num_pages = hf.num_pages();
+
         // iterate through pages in heapfile
-        if fsm.is_empty() {
+        if num_pages == 0 {
             // if there are no pages in heapfile, return none
             return None;
         }
         // if we're out of pages, return none
-        if self.page_index as u16 > hf.num_pages() {
+        if self.page_index as u16 >= num_pages {
             return None;
         }
         // save the page we want to iterate
         let page_to_iterate = HeapFile::read_page_from_file(&hf, self.page_index).unwrap();
         // iterate through page
         let mut p_iter = page_to_iterate.into_iter();
+        println!("Im here in HeapFileIter! 1");
+
+        let rec = p_iter.next();
+        println!("record: {:?}", rec.clone().unwrap());
         // if dont iterating through page, move to the next page (self.page_index += 1)
-        if p_iter.next().is_none() {
+        if rec.is_none() {
+            println!("rec was none, moving to next page");
             self.page_index += 1;
+            //return rec;
         }
         // return the page's next record
-        return p_iter.next();
+        //p_iter.next();
+
+        return rec;
     }
 }
