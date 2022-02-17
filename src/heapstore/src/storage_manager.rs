@@ -21,7 +21,7 @@ use std::sync::{Arc, RwLock};
 #[derive(Serialize, Deserialize)]
 pub struct StorageManager {
     #[serde(skip)]
-    pub containers: Arc<RwLock<HashMap<ContainerId, HeapFile>>>,
+    containers: Arc<RwLock<HashMap<ContainerId, HeapFile>>>,
     // Hashmap between containerId and Heapfile
     // then I can serialize the heapfile.file object to recreate the heapfile later
     // pub container_id_to_heapfile_object:
@@ -153,20 +153,20 @@ impl StorageTrait for StorageManager {
         };
         // return it
         new_SM
-        // panic!("TODO hs")
+        //  panic!("TODO hs")
     }
 
     /// Create a new storage manager for testing. If this creates a temporary directory it should be cleaned up
     /// when it leaves scope.
     fn new_test_sm() -> Self {
-        init();
+        /*
         let storage_path = gen_random_dir().to_string_lossy().to_string();
         debug!("Making new temp storage_manager {}", storage_path);
         // use new() and storage_path to make test SM
         let test_SM = StorageManager::new(storage_path);
         // return test SM
-        test_SM
-        //   panic!("TODO milestone hs");
+        test_SM*/
+        panic!("TODO milestone hs");
     }
 
     fn get_simple_config() -> common::ContainerConfig {
@@ -264,7 +264,7 @@ impl StorageTrait for StorageManager {
             vec_of_value_ids.push(val_id);
         }
         vec_of_value_ids
-        //   panic!("TODO milestone hs");
+        //     panic!("TODO milestone hs");
     }
 
     /// Delete the data for a value. If the valueID is not found it returns Ok() still.
@@ -300,13 +300,15 @@ impl StorageTrait for StorageManager {
         id: ValueId,
         _tid: TransactionId,
     ) -> Result<ValueId, CrustyError> {
+        /*
         let container_id = id.container_id;
         let page_id = id.page_id.unwrap();
         let slot_id = id.slot_id.unwrap();
         // first delete the record
         self.delete_value(id, _tid);
         // then re-insert record into heapfile
-        Ok(self.insert_value(container_id, value, _tid))
+        Ok(self.insert_value(container_id, value, _tid))*/
+        panic!("TODO milestone hs");
     }
 
     /// Create a new container to be stored.
@@ -327,8 +329,7 @@ impl StorageTrait for StorageManager {
         _container_type: common::ids::StateType,
         _dependencies: Option<Vec<ContainerId>>,
     ) -> Result<(), CrustyError> {
-        /*
-        // unlock containers field
+        /*// unlock containers field
         let mut containers = self.containers.write().unwrap();
         // construct the new heapfile
         let mut hf_file_path = PathBuf::new();
@@ -368,8 +369,7 @@ impl StorageTrait for StorageManager {
     /// Remove the container and all stored values in the container.
     /// If the container is persisted remove the underlying files
     fn remove_container(&self, container_id: ContainerId) -> Result<(), CrustyError> {
-        /*
-        // delete the heapfile w associated container id
+        /*// delete the heapfile w associated container id
         let mut containers_unlock = self.containers.write().unwrap();
         let hf = containers_unlock.get(&container_id);
         match hf {
