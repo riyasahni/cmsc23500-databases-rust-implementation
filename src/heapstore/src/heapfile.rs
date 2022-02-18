@@ -117,6 +117,7 @@ impl HeapFile {
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = pid * 4096;
         // open file
+
         let mut f = &mut self.hf_file_object.write().unwrap();
         // move cursor to the page_offset position in the file
         f.seek(SeekFrom::Start(page_offset as u64));
@@ -142,6 +143,7 @@ impl HeapFile {
         }
 
         // open file
+
         let mut file = &mut self.hf_file_object.write().unwrap();
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = page.get_page_id() * 4096;

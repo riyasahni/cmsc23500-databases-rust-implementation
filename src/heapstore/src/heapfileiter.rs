@@ -16,6 +16,7 @@ pub struct HeapFileIterator {
     container_id: ContainerId,
     transaction_id: TransactionId,
     page_index: u16,
+    slot_index: u16,
 }
 
 /// Required HeapFileIterator functions
@@ -29,6 +30,7 @@ impl HeapFileIterator {
             container_id: container_id,
             transaction_id: tid,
             page_index: 0,
+            slot_index: 0,
         };
         new_HeapFileIter
     }
@@ -39,36 +41,44 @@ impl HeapFileIterator {
 impl Iterator for HeapFileIterator {
     type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
-        // open heapfile and free space map
+        // open heapfile
         let hf = &self.heapfile;
         let num_pages = hf.num_pages();
 
         // iterate through pages in heapfile
-        if num_pages == 0 {
+        if num_pages == 0 || self.slot_index >= num_pages || self.page_index as u16 > num_pages {
             // if there are no pages in heapfile, return none
             return None;
         }
-        // if we're out of pages, return none
-        if self.page_index as u16 >= num_pages {
-            return None;
-        }
+
         // save the page we want to iterate
-        let page_to_iterate = HeapFile::read_page_from_file(&hf, self.page_index).unwrap();
+        let page_to_iterate = HeapFile::read_page_from_file(&hf, self.page_index);
+        let page_to_iterate: Page = match self
+            .heapfile
+            .read_page_from_file(self.page_index.try_into().unwrap())
+        {
+            Ok(page_to_iterate) => page_to_iterate,
+            Err(_) => return None,
+        };
+
         // iterate through page
+        let num_records = page_to_iterate.header.vec_of_records.len();
         let mut p_iter = page_to_iterate.into_iter();
-        println!("Im here in HeapFileIter! 1");
+        let mut next_rec = p_iter.next();
 
-        let rec = p_iter.next();
-        println!("record: {:?}", rec.clone().unwrap());
         // if dont iterating through page, move to the next page (self.page_index += 1)
-        if rec.is_none() {
-            println!("rec was none, moving to next page");
+        if next_rec.is_none() {
             self.page_index += 1;
-            //return rec;
         }
-        // return the page's next record
-        //p_iter.next();
-
-        return rec;
+        while self.slot_index < num_records as u16 {
+            for i in 0..num_records {
+                p_iter.next();
+            }
+            self.slot_index += 1;
+            return p_iter.next();
+        }
+        self.slot_index = 0;
+        self.page_index += 1;
+        return self.next();
     }
 }

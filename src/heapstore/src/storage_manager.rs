@@ -8,6 +8,8 @@ use common::testutil::gen_random_dir;
 use common::testutil::init;
 use common::PAGE_SIZE;
 use core::num;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::Deserialize;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
@@ -22,6 +24,7 @@ use std::sync::{Arc, RwLock};
 pub struct StorageManager {
     #[serde(skip)]
     containers: Arc<RwLock<HashMap<ContainerId, Arc<HeapFile>>>>,
+    containers2: Arc<RwLock<HashMap<ContainerId, PathBuf>>>,
     // Hashmap between containerId and Heapfile
     // then I can serialize the heapfile.file object to recreate the heapfile later
     // pub container_id_to_heapfile_object:
@@ -127,7 +130,6 @@ impl StorageTrait for StorageManager {
     /// Create a new storage manager that will use storage_path as the location to persist data
     /// (if the storage manager persists records on disk)
     fn new(storage_path: String) -> Self {
-        /*
         // check if storage path already exists
         let mut storage_path_PathBuf = PathBuf::new();
         storage_path_PathBuf.push(storage_path.clone());
@@ -139,24 +141,34 @@ impl StorageTrait for StorageManager {
             saved_heapfile_path.push("serialized_hm.json");
             // open up the serialized hf for this SM directory
             let mut serialized_hm_file = fs::File::open(saved_heapfile_path).unwrap();
+
             // deserialize the file back into a heapfile struct
-            //
-            // let config_str = std::fs::read_to_string("testdata.json").unwrap();
-            let containers: HashMap<ContainerId, (PathBuf, Vec<u16>)> =
+            let mut containers2: HashMap<ContainerId, PathBuf> =
                 serde_json::from_reader(serialized_hm_file).expect("cannot deserialize file");
+            let mut containers: HashMap<ContainerId, Arc<HeapFile>> = HashMap::new();
+
+            // now recreate the 'containers' hashmap with container_id:HashFile mapping
+            for (c_id, hf_path) in containers2.iter() {
+                let hf = HeapFile::new(hf_path.to_path_buf()).expect("failed to create hf");
+                containers.insert(*c_id, Arc::new(hf));
+            }
+
             // recreate the SM
             let reloaded_SM = StorageManager {
                 containers: Arc::new(RwLock::new(containers)),
+                containers2: Arc::new(RwLock::new(containers2)),
                 storage_path: storage_path,
                 is_temp: false,
             };
             return reloaded_SM;
-        }*/
+        }
+
         // if storage path does not already exist, then no need to reload anything
         // construct a new, empty SM
         fs::create_dir_all(storage_path.clone());
         let new_SM = StorageManager {
             containers: Arc::new(RwLock::new(HashMap::new())),
+            containers2: Arc::new(RwLock::new(HashMap::new())),
             storage_path: storage_path,
             is_temp: false,
         };
@@ -338,12 +350,13 @@ impl StorageTrait for StorageManager {
     ) -> Result<(), CrustyError> {
         // unlock containers field
         let mut containers = self.containers.write().unwrap();
+        let mut containers2 = self.containers2.write().unwrap();
         // construct the new heapfile
         let mut hf_file_path = PathBuf::new();
         hf_file_path.push(self.storage_path.clone());
         hf_file_path.push(container_id.clone().to_string());
         hf_file_path.with_extension("txt");
-        let new_hf = HeapFile::new(hf_file_path).unwrap();
+        let new_hf = HeapFile::new(hf_file_path.clone()).unwrap();
         // if container already has container id then don't add container id again
         if containers.contains_key(&container_id) {
             debug!(
@@ -353,11 +366,12 @@ impl StorageTrait for StorageManager {
             // dropping lock to fix my deadlock error!!
             println!("create_container calling drop");
             drop(containers);
+            drop(containers2);
             return Ok(());
         }
         // else, insert new heapfile (value) with given container_id (key)
         containers.insert(container_id, Arc::new(new_hf));
-
+        containers2.insert(container_id, hf_file_path);
         Ok(())
         // panic!("TODO milestone hs");
     }
@@ -486,11 +500,12 @@ impl StorageTrait for StorageManager {
     /// worry about recreating read_count or write_count.
     fn shutdown(&self) {
         // first check if the SM is temporary, and if it's not then serialize & store its contents
-        /*if !self.is_temp {
-            // serialize the SM's hashmap w container id & heapfile maps
-            let containers_lock = self.containers.write().unwrap();
+        let mut containers_unlock = self.containers.write().unwrap();
+        let mut containers2_unlock = self.containers2.write().unwrap();
+        if !self.is_temp {
+            // serialize the SM's hashmap w container id & heapfile file paths
             let serialized_hm =
-                serde_json::to_string(&*containers_lock).expect("failed to serialize");
+                serde_json::to_string(&*containers2_unlock).expect("failed to serialize");
             // create file path for the file that I will write serialized_hm into
             let mut new_heapfile_path = PathBuf::new();
             new_heapfile_path.push(&self.storage_path.clone());
@@ -499,7 +514,29 @@ impl StorageTrait for StorageManager {
             // write the serialized info into the file
             serialized_hm_file.write(serialized_hm.as_bytes());
         }
-        // then just remove all stored files*/
+        /*if !self.is_temp {
+            for (key, value) in &*containers_unlock {
+                // serialize the contents of HeapFile struct
+                //  let serialized_hf_file = serde_json::to_string(&value.hf_file_object)
+                //     .expect("failed to serialize hf_file");
+                let serialized_hf_file_path = serde_json::to_string(&value.hf_file_path)
+                    .expect("failed to serialize hf_file");
+                let serialized_hf_fsm = serde_json::to_string(&value.free_space_map)
+                    .expect("failed to serialize hf_file");
+                // create file to store serialized contents
+                let mut new_heapfile_path = PathBuf::new();
+                new_heapfile_path.push(&self.storage_path.clone());
+                new_heapfile_path.push("serialized_hm.json");
+                let mut serialized_hm_file = fs::File::create(new_heapfile_path).unwrap();
+
+                // write serialized fields into the file
+                //serialized_hm_file.write(serialized_hf_file.as_bytes());
+                serialized_hm_file.write(serialized_hf_file_path.as_bytes());
+                serialized_hm_file.write(serialized_hf_fsm.as_bytes());
+            }
+        }*/
+
+        // then just remove all stored files
         self.reset();
         //panic!("TODO milestone hs");
     }
@@ -632,7 +669,7 @@ mod test {
         for (i, x) in iter.enumerate() {
             println!("IM HERE IN HS_SM_B_ITER_SMALL: (mine) {:?}", x);
             println!("IM HERE IN HS_SM_B_ITER_SMALL: (correct) {:?}", byte_vec[i]);
-            //assert_eq!(byte_vec[i], x);
+            // assert_eq!(byte_vec[i], x);
         }
 
         // Should be on two pages
