@@ -56,12 +56,11 @@ impl HeapFile {
             }
         };
         // create new HeapFile struct
-        let fsm = Vec::new();
-        let fsm_lock = Arc::new(RwLock::new(fsm));
+
         Ok(HeapFile {
             hf_file_path: file_path,
             hf_file_object: Arc::new(RwLock::new(file)),
-            free_space_map: fsm_lock,
+            free_space_map: Arc::new(RwLock::new(Vec::new())),
             read_count: AtomicU16::new(0),
             write_count: AtomicU16::new(0),
         })
@@ -89,6 +88,13 @@ impl HeapFile {
     /// Return type is PageId (alias for another type) as we cannot have more
     /// pages than PageId can hold.
     pub fn num_pages(&self) -> PageId {
+        //file_ref.metadata()
+        //meta.len() <- this function gives me the number of bytes in a file
+        //divide # of bytes in file by size of page to find num pages
+        // https://doc.rust-lang.org/stable/std/fs/struct.Metadata.html
+
+        // extract each page given page id and calculate free space
+
         let mut fsm = self.free_space_map.read().unwrap();
         // the indexes for elements in free_space_map vector are the page ids
         if fsm.is_empty() {
@@ -100,6 +106,10 @@ impl HeapFile {
             max_page_id
         }
     }
+
+    // BUILD FREE SPACE MAP USING NUM PAGES INFO & GET RID OF THE FSM FIELD IN THE HEAPFILE STRUCT!!!
+    // pub fn build_free_space_map(&self) -> Vec<u16> {}
+
     /// Read the page from the file.
     /// Errors could arise from the filesystem or invalid pageId
     pub(crate) fn read_page_from_file(&self, pid: PageId) -> Result<Page, CrustyError> {

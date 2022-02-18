@@ -72,9 +72,14 @@ impl Iterator for HeapFileIterator {
         }
         while self.slot_index < num_records as u16 {
             for i in 0..num_records {
+                println!("heapfileiter 0");
                 p_iter.next();
             }
             self.slot_index += 1;
+            println!("next record: {:?}", p_iter.next());
+            if p_iter.next().is_none() {
+                return self.next();
+            }
             return p_iter.next();
         }
         self.slot_index = 0;

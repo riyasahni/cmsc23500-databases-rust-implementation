@@ -24,7 +24,7 @@ use std::sync::{Arc, RwLock};
 pub struct StorageManager {
     #[serde(skip)]
     containers: Arc<RwLock<HashMap<ContainerId, Arc<HeapFile>>>>,
-    containers2: Arc<RwLock<HashMap<ContainerId, PathBuf>>>,
+    containers2: Arc<RwLock<HashMap<ContainerId, (PathBuf)>>>,
     // Hashmap between containerId and Heapfile
     // then I can serialize the heapfile.file object to recreate the heapfile later
     // pub container_id_to_heapfile_object:
@@ -81,6 +81,10 @@ impl StorageManager {
     ) -> Result<(), CrustyError> {
         let containers_unlock = self.containers.write().unwrap();
         // extract the heapfile corresponding with container_id
+        if containers_unlock.get(&container_id).is_none() {
+            println!("SM write_page: hf is none"); //WHY??
+            return Ok(());
+        }
         let hf = containers_unlock.get(&container_id).unwrap();
         // write page to file
         hf.write_page_to_file(page)
@@ -90,13 +94,19 @@ impl StorageManager {
     /// Get the number of pages for a container
     fn get_num_pages(&self, container_id: ContainerId) -> PageId {
         let containers_unlock = self.containers.read().unwrap();
+        if containers_unlock.contains_key(&container_id) {
+            let hf = containers_unlock.get(&container_id).unwrap();
+            let num_pages = HeapFile::num_pages(hf);
 
-        let hf = containers_unlock.get(&container_id).unwrap();
-        let num_pages = HeapFile::num_pages(hf);
+            //  println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
+            //drop(containers_unlock);
+            num_pages
+        } else {
+            panic!("container id does not exist in container!");
+            //  println!("should I be panicking here???");
+            // 0 as u16
+        }
 
-        //  println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
-        drop(containers_unlock);
-        num_pages
         //   panic!("TODO milestone hs");
     }
 
@@ -131,50 +141,66 @@ impl StorageTrait for StorageManager {
     /// (if the storage manager persists records on disk)
     fn new(storage_path: String) -> Self {
         // check if storage path already exists
-        let mut storage_path_PathBuf = PathBuf::new();
-        storage_path_PathBuf.push(storage_path.clone());
+        let storage_path_copy = storage_path.clone();
+        let storage_path_copy_1 = storage_path_copy.clone();
+        let storage_path_copy_new = storage_path_copy_1.clone();
+        //let mut storage_path_PathBuf = PathBuf::new();
+        //storage_path_PathBuf.push(storage_path.clone());
 
-        if storage_path_PathBuf.is_dir() {
+        if Path::new(&(storage_path + &"/serialized_hm.json".to_owned())).exists() {
             // get the file path for the serialized heapfile info
-            let mut saved_heapfile_path = PathBuf::new();
-            saved_heapfile_path.push(storage_path.clone());
-            saved_heapfile_path.push("serialized_hm.json");
+            let serialized_file =
+                fs::File::open(storage_path_copy + &"/serialized_hm.json".to_owned())
+                    .expect("error opening file");
             // open up the serialized hf for this SM directory
-            let mut serialized_hm_file = fs::File::open(saved_heapfile_path).unwrap();
+            println!("I am in here now! so apparenly file also exists!");
 
             // deserialize the file back into a heapfile struct
             let mut containers2: HashMap<ContainerId, PathBuf> =
-                serde_json::from_reader(serialized_hm_file).expect("cannot deserialize file");
+                serde_json::from_reader(serialized_file).expect("cannot deserialize file");
+            for (key, val) in containers2.clone().iter() {
+                println!("SM NEW CONTAINERS2: {} -> {:?}", key, val);
+            }
             let mut containers: HashMap<ContainerId, Arc<HeapFile>> = HashMap::new();
+            //    let mut containers_unlock = containers.write();
 
             // now recreate the 'containers' hashmap with container_id:HashFile mapping
             for (c_id, hf_path) in containers2.iter() {
+                println!("trying to insert constructed hf into containers hashmap");
+                println!("hf_file path used to recreate hf: {:?}", hf_path);
                 let hf = HeapFile::new(hf_path.to_path_buf()).expect("failed to create hf");
+                println!("SM NEW hf contents: {:?}", hf.free_space_map);
                 containers.insert(*c_id, Arc::new(hf));
+            }
+            for (key, val) in containers.clone().iter() {
+                println!("SM NEW CONTAINERS: {} -> {:?}", key, val.hf_file_path);
             }
 
             // recreate the SM
             let reloaded_SM = StorageManager {
                 containers: Arc::new(RwLock::new(containers)),
                 containers2: Arc::new(RwLock::new(containers2)),
-                storage_path: storage_path,
+                storage_path: storage_path_copy_1,
                 is_temp: false,
             };
             return reloaded_SM;
+        } else {
+            // if storage path does not already exist, then no need to reload anything
+            // construct a new, empty SM
+            let storage_path_copy_again = storage_path_copy_new.clone();
+            fs::create_dir_all(storage_path_copy_again);
+            println!("I'm in new() now! creating a new SM");
+            let new_SM = StorageManager {
+                containers: Arc::new(RwLock::new(HashMap::new())),
+                containers2: Arc::new(RwLock::new(HashMap::new())),
+                storage_path: storage_path_copy_new,
+                is_temp: false,
+            };
+            // return it
+            println!("just finished creating a new one :)");
+            new_SM
+            //  panic!("TODO hs")
         }
-
-        // if storage path does not already exist, then no need to reload anything
-        // construct a new, empty SM
-        fs::create_dir_all(storage_path.clone());
-        let new_SM = StorageManager {
-            containers: Arc::new(RwLock::new(HashMap::new())),
-            containers2: Arc::new(RwLock::new(HashMap::new())),
-            storage_path: storage_path,
-            is_temp: false,
-        };
-        // return it
-        new_SM
-        //  panic!("TODO hs")
     }
 
     /// Create a new storage manager for testing. If this creates a temporary directory it should be cleaned up
@@ -214,11 +240,13 @@ impl StorageTrait for StorageManager {
         value: Vec<u8>,
         tid: TransactionId,
     ) -> ValueId {
+        println!("SM here in insert_value!");
         if value.len() > PAGE_SIZE {
             panic!("Cannot handle inserting a value larger than the page size");
         }
+        println!("SM insert_value before calling get_num_pages");
         let num_pages = self.get_num_pages(container_id);
-
+        println!("SM insert_value after calling get_num_pages");
         // sift through pages in heapfile
         for i in 0..num_pages {
             if num_pages == 0 {
@@ -233,8 +261,11 @@ impl StorageTrait for StorageManager {
             let record_id = page.add_value(&value);
 
             // update free space map
+            println!("SM insert_value: before containers_unlock");
             let containers_unlock = self.containers.write().unwrap();
+            println!("SM insert_value: after containers_unlock");
             let hf = containers_unlock.get(&container_id).unwrap();
+            println!("SM insert_value: after hf extracted");
             let mut fsm = hf.free_space_map.write().unwrap();
             fsm[(num_pages - 1) as usize] = page.get_largest_free_contiguous_space() as u16;
             drop(fsm);
@@ -416,14 +447,17 @@ impl StorageTrait for StorageManager {
         _perm: Permissions,
     ) -> Self::ValIterator {
         // find the heapfile associated with container_id that's stored in ValueID
+
         let mut containers_unlock = self.containers.read().unwrap();
+        if !containers_unlock.get_key_value(&container_id).is_none() {
+            let hf = containers_unlock.get(&container_id).unwrap();
+            let hf_clone = hf.clone();
+            drop(containers_unlock);
 
-        let hf = containers_unlock.get(&container_id).unwrap();
-        let hf_clone = hf.clone();
-        drop(containers_unlock);
-
-        return HeapFileIterator::new(container_id, tid, hf_clone);
-        //   panic!("TODO Milestone hs")
+            return HeapFileIterator::new(container_id, tid, hf_clone);
+        } else {
+            panic!("get_iterator panics! container id does not exist!")
+        }
     }
 
     /// Get the data for a particular ValueId. Error if does not exists
@@ -474,15 +508,26 @@ impl StorageTrait for StorageManager {
     /// Testing utility to reset all state associated the storage manager.
     fn reset(&self) -> Result<(), CrustyError> {
         // if SM is temp, then delete the temp file
-        // let mut containers_unlock = self.containers.write().unwrap();
+        println!("and now im here in reset!");
+        if self.containers.write().is_err() || self.containers2.write().is_err() {
+            println!("reset results in ERR");
+            return Err(CrustyError::ExecutionError(
+                "rest results in ERR!".to_string(),
+            ));
+        }
+        let mut containers_unlock = self.containers.write().unwrap();
+        let mut containers2_unlock = self.containers2.write().unwrap();
+        println!("and now im here in reset!");
         /*if self.is_temp {
             // extract heapfile's temp file from hashmap
-            let temp_hf_file_path = containers_unlock.get();
+            let temp_hf_file_path = containers2_unlock.g);
             // remove the file!
             fs::remove_file(temp_hf_file_path);
         }*/
         // just reset the SM hashmap. Everything else stays the same.
-        //  containers_unlock.clear();
+        containers_unlock.clear();
+        containers2_unlock.clear();
+
         Ok(())
         //  panic!("TODO milestone hs");
     }
@@ -500,12 +545,15 @@ impl StorageTrait for StorageManager {
     /// worry about recreating read_count or write_count.
     fn shutdown(&self) {
         // first check if the SM is temporary, and if it's not then serialize & store its contents
-        let mut containers_unlock = self.containers.write().unwrap();
+        //let mut containers_unlock = self.containers.write().unwrap();
+        println!("beans!");
         let mut containers2_unlock = self.containers2.write().unwrap();
         if !self.is_temp {
+            println!("self was not temp!");
             // serialize the SM's hashmap w container id & heapfile file paths
             let serialized_hm =
                 serde_json::to_string(&*containers2_unlock).expect("failed to serialize");
+            println!("serialized containers2 hm: {}", serialized_hm);
             // create file path for the file that I will write serialized_hm into
             let mut new_heapfile_path = PathBuf::new();
             new_heapfile_path.push(&self.storage_path.clone());
@@ -535,7 +583,7 @@ impl StorageTrait for StorageManager {
                 serialized_hm_file.write(serialized_hf_fsm.as_bytes());
             }
         }*/
-
+        drop(containers2_unlock);
         // then just remove all stored files
         self.reset();
         //panic!("TODO milestone hs");
@@ -606,6 +654,9 @@ impl Drop for StorageManager {
     /// Shutdown the storage manager. Can call be called by shutdown. Should be safe to call multiple times.
     /// If temp, this should remove all stored files.
     fn drop(&mut self) {
+        /*if self.is_temp {
+            self.reset()
+        }*/
         self.shutdown()
         // panic!("TODO milestone hs");
     }

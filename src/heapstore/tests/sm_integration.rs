@@ -11,11 +11,13 @@ const RO: Permissions = Permissions::ReadOnly;
 
 #[test]
 fn sm_inserts() {
+    println!("inside sm_inserts.. ");
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
-    let num_vals: Vec<usize> = vec![10, 50, 75, 100, 500, 1000];
+    //let num_vals: Vec<usize> = vec![10, 50, 75, 100, 500, 1000];
+    let num_vals: Vec<usize> = vec![1, 10];
     for i in num_vals {
-        let vals1 = get_random_vec_of_byte_vec(i, 50, 100);
+        let vals1 = get_random_vec_of_byte_vec(i, 1, 10);
         let cid = i as ContainerId;
         sm.create_table(cid).unwrap();
         sm.insert_values(cid, vals1.clone(), t);
@@ -74,26 +76,34 @@ fn sm_insert_updates() {
 #[test]
 #[should_panic]
 fn sm_no_container() {
+    println!("inside sm_no_container");
     let sm = StorageManager::new_test_sm();
+    println!("called new_test_sm");
     let t = TransactionId::new();
+    println!("called new");
     let vals1 = get_random_vec_of_byte_vec(100, 50, 100);
     sm.insert_values(1, vals1, t);
 }
 
 #[test]
 fn sm_test_shutdown() {
+    println!("SM TEST SHUTDOWN: I made it here in shutdown-9999");
     let path = String::from("tmp");
     let sm = StorageManager::new(path.clone());
+    println!("SM TEST SHUTDOWN: after creating new SM");
     let t = TransactionId::new();
 
     let vals1 = get_random_vec_of_byte_vec(100, 50, 100);
     let cid = 1;
     sm.create_table(cid).unwrap();
     let _val_ids = sm.insert_values(cid, vals1.clone(), t);
+    println!("SM TEST SHUTDOWN: I made it here before shutdown");
     sm.shutdown();
-
+    println!("SM TEST SHUTDOWN: I made it here after shutdown");
     let sm2 = StorageManager::new(path);
+    println!("SM TEST SHUTDOWN: I made it here after shutdown");
     let check_vals: Vec<Vec<u8>> = sm2.get_iterator(cid, t, RO).collect();
+    println!("SM TEST SHUTDOWN: I made it here get_iteraor");
     assert!(compare_unordered_byte_vecs(&vals1, check_vals));
     sm2.reset().unwrap();
 }
