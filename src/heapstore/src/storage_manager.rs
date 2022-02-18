@@ -24,7 +24,7 @@ use std::sync::{Arc, RwLock};
 pub struct StorageManager {
     #[serde(skip)]
     containers: Arc<RwLock<HashMap<ContainerId, Arc<HeapFile>>>>,
-    containers2: Arc<RwLock<HashMap<ContainerId, (PathBuf)>>>,
+    containers2: Arc<RwLock<HashMap<ContainerId, PathBuf>>>,
     // Hashmap between containerId and Heapfile
     // then I can serialize the heapfile.file object to recreate the heapfile later
     // pub container_id_to_heapfile_object:
@@ -49,16 +49,18 @@ impl StorageManager {
         if containers_unlock.contains_key(&container_id) {
             // if heapfile path corresponding with container_id exists then extract that heapfile
             let hf = containers_unlock.get(&container_id).unwrap();
+            let hf_free_space_map = HeapFile::build_free_space_map_for_heapfile(&hf);
 
-            if hf.free_space_map.is_poisoned() {
+            /*if hf.free_space_map.is_poisoned() {
                 print!("get_page is poisoned")
-            }
-            if hf.free_space_map.read().unwrap().is_empty() {
+            }*/
+
+            if hf_free_space_map.is_empty() {
                 //   drop(hf.free_space_map);
                 drop(containers_unlock);
                 return None;
             }
-            if page_id > (hf.free_space_map.read().unwrap().len() - 1) as u16 {
+            if page_id > (hf_free_space_map.len() - 1) as u16 {
                 //    drop(hf.free_space_map);
                 drop(containers_unlock);
                 return None;
@@ -97,17 +99,10 @@ impl StorageManager {
         if containers_unlock.contains_key(&container_id) {
             let hf = containers_unlock.get(&container_id).unwrap();
             let num_pages = HeapFile::num_pages(hf);
-
-            //  println!("GET NUM PAGES free space map: {:?}", hf_free_space_map);
-            //drop(containers_unlock);
             num_pages
         } else {
             panic!("container id does not exist in container!");
-            //  println!("should I be panicking here???");
-            // 0 as u16
         }
-
-        //   panic!("TODO milestone hs");
     }
 
     /// Test utility function for counting reads and writes served by the heap file.
@@ -169,7 +164,7 @@ impl StorageTrait for StorageManager {
                 println!("trying to insert constructed hf into containers hashmap");
                 println!("hf_file path used to recreate hf: {:?}", hf_path);
                 let hf = HeapFile::new(hf_path.to_path_buf()).expect("failed to create hf");
-                println!("SM NEW hf contents: {:?}", hf.free_space_map);
+                // println!("SM NEW hf contents: {:?}", hf.free_space_map);
                 containers.insert(*c_id, Arc::new(hf));
             }
             for (key, val) in containers.clone().iter() {
@@ -266,9 +261,10 @@ impl StorageTrait for StorageManager {
             println!("SM insert_value: after containers_unlock");
             let hf = containers_unlock.get(&container_id).unwrap();
             println!("SM insert_value: after hf extracted");
-            let mut fsm = hf.free_space_map.write().unwrap();
-            fsm[(num_pages - 1) as usize] = page.get_largest_free_contiguous_space() as u16;
-            drop(fsm);
+            //   let mut fsm = HeapFile::build_free_space_map_for_heapfile(&hf);
+
+            // fsm[(num_pages - 1) as usize] = page.get_largest_free_contiguous_space() as u16;
+            // drop(fsm);
             drop(containers_unlock);
 
             // check again that value was added to page

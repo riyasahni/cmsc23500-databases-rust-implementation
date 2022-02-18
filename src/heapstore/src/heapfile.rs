@@ -1,7 +1,8 @@
 use crate::page::{Header, Page};
 use common::ids::PageId;
 use common::{CrustyError, PAGE_SIZE};
-use std::fs::{File, OpenOptions};
+use core::num;
+use std::fs::{metadata, File, OpenOptions};
 use std::io::prelude::*;
 use std::io::BufWriter;
 use std::io::{Seek, SeekFrom};
@@ -30,7 +31,6 @@ use std::sync::{Arc, Mutex, RwLock};
 pub(crate) struct HeapFile {
     pub hf_file_path: PathBuf,
     pub hf_file_object: Arc<RwLock<File>>,
-    pub free_space_map: Arc<RwLock<Vec<u16>>>,
     pub read_count: AtomicU16,
     pub write_count: AtomicU16,
 }
@@ -60,55 +60,21 @@ impl HeapFile {
         Ok(HeapFile {
             hf_file_path: file_path,
             hf_file_object: Arc::new(RwLock::new(file)),
-            free_space_map: Arc::new(RwLock::new(Vec::new())),
             read_count: AtomicU16::new(0),
             write_count: AtomicU16::new(0),
         })
     }
-    /*
-    /// Utility function: returns a heapfile struct given its file path & free space map
-    pub fn returns_heapfile_from_filepath_and_fsm(fp: PathBuf, fsm: Vec<u16>) -> HeapFile {
-        println!("recreated heapfile (FSM)1: {:?}", fsm);
-        let file_object = HeapFile::new(fp).unwrap().hf_file_object;
-        let recreated_heapfile = HeapFile {
-            hf_file_path: fp,
-            hf_file_object: file_object,
-            free_space_map: Arc::new(RwLock::new(fsm)),
-            read_count: AtomicU16::new(0),
-            write_count: AtomicU16::new(0),
-        };
-        println!(
-            "recreated heapfile (FSM)2: {:?}",
-            recreated_heapfile.free_space_map
-        );
-        recreated_heapfile
-    }*/
 
     /// Return the number of pages for this HeapFile.
     /// Return type is PageId (alias for another type) as we cannot have more
     /// pages than PageId can hold.
     pub fn num_pages(&self) -> PageId {
-        //file_ref.metadata()
-        //meta.len() <- this function gives me the number of bytes in a file
-        //divide # of bytes in file by size of page to find num pages
-        // https://doc.rust-lang.org/stable/std/fs/struct.Metadata.html
-
-        // extract each page given page id and calculate free space
-
-        let mut fsm = self.free_space_map.read().unwrap();
-        // the indexes for elements in free_space_map vector are the page ids
-        if fsm.is_empty() {
-            drop(fsm);
-            return 0;
-        } else {
-            let max_page_id = fsm.len() as u16;
-            drop(fsm);
-            max_page_id
-        }
+        let hf_file_metadata = metadata(self.hf_file_path.clone()).unwrap();
+        let num_bytes_in_hf = hf_file_metadata.len();
+        // we know the size of each page
+        let num_pages = (num_bytes_in_hf / 4096) as u16;
+        num_pages
     }
-
-    // BUILD FREE SPACE MAP USING NUM PAGES INFO & GET RID OF THE FSM FIELD IN THE HEAPFILE STRUCT!!!
-    // pub fn build_free_space_map(&self) -> Vec<u16> {}
 
     /// Read the page from the file.
     /// Errors could arise from the filesystem or invalid pageId
@@ -127,7 +93,6 @@ impl HeapFile {
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = pid * 4096;
         // open file
-
         let mut f = &mut self.hf_file_object.write().unwrap();
         // move cursor to the page_offset position in the file
         f.seek(SeekFrom::Start(page_offset as u64));
@@ -143,6 +108,21 @@ impl HeapFile {
         Ok(final_page)
     }
 
+    // BUILD FREE SPACE MAP USING NUM PAGES INFO & GET RID OF THE FSM FIELD IN THE HEAPFILE STRUCT!!!
+    pub fn build_free_space_map_for_heapfile(&self) -> Vec<u16> {
+        let num_pgs = self.num_pages();
+        let mut free_space_map = Vec::new();
+        if num_pgs == 0 {
+            return free_space_map;
+        }
+        for i in 0..num_pgs {
+            let pg = self.read_page_from_file(i).unwrap();
+            let contig_space = Page::get_largest_free_contiguous_space(&pg) as u16;
+            free_space_map.push(contig_space);
+        }
+        free_space_map
+    }
+
     /// Take a page and write it to the underlying file.
     /// This could be an existing page or a new page
     pub(crate) fn write_page_to_file(&self, page: Page) -> Result<(), CrustyError> {
@@ -151,9 +131,6 @@ impl HeapFile {
         {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
-
-        // open file
-
         let mut file = &mut self.hf_file_object.write().unwrap();
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = page.get_page_id() * 4096;
@@ -163,15 +140,6 @@ impl HeapFile {
         let page_bytes: &[u8] = &Page::get_bytes(&page);
         // write/clone bytes into the heapfile
         file.write(page_bytes);
-        let mut fsm = self.free_space_map.write().unwrap();
-        let page_contig_space = (page.get_largest_free_contiguous_space()) as u16;
-        // check if page_id already exists in fsm then reuse it
-        if fsm.len() as u16 <= page.get_page_id() || fsm.is_empty() {
-            fsm.push(page_contig_space);
-        } else {
-            fsm[page.get_page_id() as usize] = page_contig_space;
-        }
-        // drop(f);
 
         Ok(())
     }
