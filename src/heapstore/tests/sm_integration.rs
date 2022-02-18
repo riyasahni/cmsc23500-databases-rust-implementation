@@ -15,13 +15,15 @@ fn sm_inserts() {
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
     //let num_vals: Vec<usize> = vec![10, 50, 75, 100, 500, 1000];
-    let num_vals: Vec<usize> = vec![1, 10];
+    let num_vals: Vec<usize> = vec![20, 50];
     for i in num_vals {
         let vals1 = get_random_vec_of_byte_vec(i, 1, 10);
         let cid = i as ContainerId;
         sm.create_table(cid).unwrap();
         sm.insert_values(cid, vals1.clone(), t);
         let check_vals: Vec<Vec<u8>> = sm.get_iterator(cid, t, RO).collect();
+        println!("vals1[0]: {:?}", vals1[0]);
+        println!("check_vals[0]: {:?}", check_vals);
         assert!(
             compare_unordered_byte_vecs(&vals1, check_vals),
             "Insert of size {} should be equal",

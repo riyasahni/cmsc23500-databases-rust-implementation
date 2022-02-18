@@ -309,7 +309,7 @@ impl Iterator for PageIter {
         // now, check if I still have enough valid records to return based on "index"
         if self.index > valid_records.len() - 1 {
             // if I'm out of valid records, return 'None'
-            println!("out of records: {}", self.index);
+            //    println!("PAGE: out of records: {}", self.index);
             return None;
         } else {
             // else, save my valid slotid picked at index
@@ -322,7 +322,6 @@ impl Iterator for PageIter {
             // increment my index for the next "iter"
             self.index += 1;
             // return my valid slotid
-            println!("slot id {}", self.index);
             return Some(result);
         }
     }

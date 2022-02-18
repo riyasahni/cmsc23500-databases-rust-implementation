@@ -1,0 +1,10 @@
+I am obviously planning to use my submission for this Milestone.
+
+This project was extremely difficult. I don't think I had sufficient documentation
+to understand what was going on early enough. I started this project the day I got it,
+and I've already spent upwards of 60 hours trying to complete it. I've attended every OH 
+that I could make, and almost always never get my questions answered, because they involve
+debugging. It takes an extremely long time to debug via Ed.
+
+I'm not enjoying this all. Very unfair to students who have never had experience with a systems
+class before.

@@ -25,10 +25,6 @@ pub struct StorageManager {
     #[serde(skip)]
     containers: Arc<RwLock<HashMap<ContainerId, Arc<HeapFile>>>>,
     containers2: Arc<RwLock<HashMap<ContainerId, PathBuf>>>,
-    // Hashmap between containerId and Heapfile
-    // then I can serialize the heapfile.file object to recreate the heapfile later
-    // pub container_id_to_heapfile_object:
-    /// Path to database metadata files.
     pub storage_path: String,
     is_temp: bool,
 }
@@ -51,27 +47,19 @@ impl StorageManager {
             let hf = containers_unlock.get(&container_id).unwrap();
             let hf_free_space_map = HeapFile::build_free_space_map_for_heapfile(&hf);
 
-            /*if hf.free_space_map.is_poisoned() {
-                print!("get_page is poisoned")
-            }*/
-
             if hf_free_space_map.is_empty() {
-                //   drop(hf.free_space_map);
                 drop(containers_unlock);
                 return None;
             }
             if page_id > (hf_free_space_map.len() - 1) as u16 {
-                //    drop(hf.free_space_map);
                 drop(containers_unlock);
                 return None;
             }
             // if page_id exists, then read page from file & return the page
-            //drop(containers_unlock);
             return Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
         }
         drop(containers_unlock);
         None
-        //  panic!("TODO milestone hs");
     }
 
     /// Write a page
@@ -202,6 +190,7 @@ impl StorageTrait for StorageManager {
     /// when it leaves scope.
     fn new_test_sm() -> Self {
         let storage_path = gen_random_dir().to_string_lossy().to_string();
+        println!("storage path: {:?}", storage_path);
         /*let storage_path = fs::create_dir_all("/some/dir");
         match storage_path {
             Result() => {
@@ -235,49 +224,35 @@ impl StorageTrait for StorageManager {
         value: Vec<u8>,
         tid: TransactionId,
     ) -> ValueId {
-        println!("SM here in insert_value!");
         if value.len() > PAGE_SIZE {
             panic!("Cannot handle inserting a value larger than the page size");
         }
-        println!("SM insert_value before calling get_num_pages");
         let num_pages = self.get_num_pages(container_id);
-        println!("SM insert_value after calling get_num_pages");
         // sift through pages in heapfile
         for i in 0..num_pages {
             if num_pages == 0 {
                 continue;
             }
             // if an existing page has space for record, insert it
-
+            //    println!("SM inserts: before getting page");
             let mut page =
                 Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
-
-            //  println!("record_id1: {}", page.add_value(&value).unwrap());
             let record_id = page.add_value(&value);
-
-            // update free space map
-            println!("SM insert_value: before containers_unlock");
-            let containers_unlock = self.containers.write().unwrap();
-            println!("SM insert_value: after containers_unlock");
-            let hf = containers_unlock.get(&container_id).unwrap();
-            println!("SM insert_value: after hf extracted");
-            //   let mut fsm = HeapFile::build_free_space_map_for_heapfile(&hf);
-
-            // fsm[(num_pages - 1) as usize] = page.get_largest_free_contiguous_space() as u16;
-            // drop(fsm);
-            drop(containers_unlock);
-
+            //     println!("SM inserts: after getting page");
+            //page.add_value(&value);
+            //    println!("SM inserts: after adding value to page");
             // check again that value was added to page
-            if record_id.is_none() {
+            if record_id.clone().is_none() {
+                //        println!("SM inserts:nothing added to page...");
                 continue;
             }
             self.write_page(container_id, page, tid);
-            //self.write_page(container_id, page, tid);
+
             return ValueId {
                 container_id,
                 segment_id: None,
                 page_id: Some(i),
-                slot_id: record_id,
+                slot_id: record_id.clone(),
             };
         }
 
@@ -306,7 +281,9 @@ impl StorageTrait for StorageManager {
         // create vector of value ids that I will return
         let mut vec_of_value_ids = Vec::new();
         for val in values.iter() {
+            println!("SM insert values: val:{:?}", val);
             let val_id = self.insert_value(container_id, val.to_vec(), tid);
+            println!("SM insert values: val_id:{}", val_id.slot_id.unwrap());
             vec_of_value_ids.push(val_id);
         }
         vec_of_value_ids
@@ -448,7 +425,7 @@ impl StorageTrait for StorageManager {
         if !containers_unlock.get_key_value(&container_id).is_none() {
             let hf = containers_unlock.get(&container_id).unwrap();
             let hf_clone = hf.clone();
-            drop(containers_unlock);
+            // drop(containers_unlock);
 
             return HeapFileIterator::new(container_id, tid, hf_clone);
         } else {
