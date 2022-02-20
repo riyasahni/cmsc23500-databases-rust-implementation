@@ -72,7 +72,7 @@ impl StorageManager {
         let containers_unlock = self.containers.write().unwrap();
         // extract the heapfile corresponding with container_id
         if containers_unlock.get(&container_id).is_none() {
-            println!("SM write_page: hf is none"); //WHY??
+            //  println!("SM write_page: hf is none"); //WHY??
             return Ok(());
         }
         let hf = containers_unlock.get(&container_id).unwrap();
@@ -136,28 +136,28 @@ impl StorageTrait for StorageManager {
                 fs::File::open(storage_path_copy + &"/serialized_hm.json".to_owned())
                     .expect("error opening file");
             // open up the serialized hf for this SM directory
-            println!("I am in here now! so apparenly file also exists!");
+            // println!("I am in here now! so apparenly file also exists!");
 
             // deserialize the file back into a heapfile struct
             let mut containers2: HashMap<ContainerId, PathBuf> =
                 serde_json::from_reader(serialized_file).expect("cannot deserialize file");
-            for (key, val) in containers2.clone().iter() {
+            /* for (key, val) in containers2.clone().iter() {
                 println!("SM NEW CONTAINERS2: {} -> {:?}", key, val);
-            }
+            }*/
             let mut containers: HashMap<ContainerId, Arc<HeapFile>> = HashMap::new();
             //    let mut containers_unlock = containers.write();
 
             // now recreate the 'containers' hashmap with container_id:HashFile mapping
             for (c_id, hf_path) in containers2.iter() {
-                println!("trying to insert constructed hf into containers hashmap");
-                println!("hf_file path used to recreate hf: {:?}", hf_path);
+                // println!("trying to insert constructed hf into containers hashmap");
+                // println!("hf_file path used to recreate hf: {:?}", hf_path);
                 let hf = HeapFile::new(hf_path.to_path_buf()).expect("failed to create hf");
                 // println!("SM NEW hf contents: {:?}", hf.free_space_map);
                 containers.insert(*c_id, Arc::new(hf));
             }
-            for (key, val) in containers.clone().iter() {
+            /*for (key, val) in containers.clone().iter() {
                 println!("SM NEW CONTAINERS: {} -> {:?}", key, val.hf_file_path);
-            }
+            }*/
 
             // recreate the SM
             let reloaded_SM = StorageManager {
@@ -172,7 +172,7 @@ impl StorageTrait for StorageManager {
             // construct a new, empty SM
             let storage_path_copy_again = storage_path_copy_new.clone();
             fs::create_dir_all(storage_path_copy_again);
-            println!("I'm in new() now! creating a new SM");
+            // println!("I'm in new() now! creating a new SM");
             let new_SM = StorageManager {
                 containers: Arc::new(RwLock::new(HashMap::new())),
                 containers2: Arc::new(RwLock::new(HashMap::new())),
@@ -180,7 +180,7 @@ impl StorageTrait for StorageManager {
                 is_temp: false,
             };
             // return it
-            println!("just finished creating a new one :)");
+            // println!("just finished creating a new one :)");
             new_SM
             //  panic!("TODO hs")
         }
@@ -190,7 +190,7 @@ impl StorageTrait for StorageManager {
     /// when it leaves scope.
     fn new_test_sm() -> Self {
         let storage_path = gen_random_dir().to_string_lossy().to_string();
-        println!("storage path: {:?}", storage_path);
+        //  println!("storage path: {:?}", storage_path);
         /*let storage_path = fs::create_dir_all("/some/dir");
         match storage_path {
             Result() => {
@@ -243,10 +243,11 @@ impl StorageTrait for StorageManager {
             //    println!("SM inserts: after adding value to page");
             // check again that value was added to page
             if record_id.clone().is_none() {
-                //        println!("SM inserts:nothing added to page...");
+                // println!("SM inserts:nothing added to page...");
                 continue;
             }
             self.write_page(container_id, page, tid);
+            //HeapFile::write_page_to_file(&self, page)
 
             return ValueId {
                 container_id,
@@ -265,7 +266,7 @@ impl StorageTrait for StorageManager {
             container_id,
             segment_id: None,
             page_id: Some(num_pages),
-            slot_id,
+            slot_id: slot_id.clone(),
         };
     }
 
@@ -281,9 +282,9 @@ impl StorageTrait for StorageManager {
         // create vector of value ids that I will return
         let mut vec_of_value_ids = Vec::new();
         for val in values.iter() {
-            println!("SM insert values: val:{:?}", val);
+            // println!("SM insert values: val:{:?}", val);
             let val_id = self.insert_value(container_id, val.to_vec(), tid);
-            println!("SM insert values: val_id:{}", val_id.slot_id.unwrap());
+            // println!("SM insert values: val_id:{}", val_id.slot_id.unwrap());
             vec_of_value_ids.push(val_id);
         }
         vec_of_value_ids
@@ -368,7 +369,7 @@ impl StorageTrait for StorageManager {
                 &container_id
             );
             // dropping lock to fix my deadlock error!!
-            println!("create_container calling drop");
+            //println!("create_container calling drop");
             drop(containers);
             drop(containers2);
             return Ok(());
@@ -421,14 +422,18 @@ impl StorageTrait for StorageManager {
     ) -> Self::ValIterator {
         // find the heapfile associated with container_id that's stored in ValueID
 
-        let mut containers_unlock = self.containers.read().unwrap();
+        let mut containers_unlock = self.containers.write().unwrap();
+
         if !containers_unlock.get_key_value(&container_id).is_none() {
+            //  println!("in get_iterator");
             let hf = containers_unlock.get(&container_id).unwrap();
             let hf_clone = hf.clone();
             // drop(containers_unlock);
-
+            // println!("get_iterator: heapfile fsm: {:?}", hf_clone.hf_file_path);
+            drop(containers_unlock);
             return HeapFileIterator::new(container_id, tid, hf_clone);
         } else {
+            //  println!("get_iterator: invalid container id");
             panic!("get_iterator panics! container id does not exist!")
         }
     }
@@ -440,7 +445,6 @@ impl StorageTrait for StorageManager {
         tid: TransactionId,
         perm: Permissions,
     ) -> Result<Vec<u8>, CrustyError> {
-        /*
         // first check if container id exists
         let mut containers_unlock = self.containers.read().unwrap();
         let container_id = id.container_id;
@@ -469,8 +473,8 @@ impl StorageTrait for StorageManager {
                     "Invalid heap file".to_string(),
                 ))
             }
-        } */
-        panic!("TODO milestone hs");
+        }
+        //  panic!("TODO milestone hs");
     }
 
     /// Notify the storage manager that the transaction is finished so that any held resources can be released.
@@ -481,16 +485,16 @@ impl StorageTrait for StorageManager {
     /// Testing utility to reset all state associated the storage manager.
     fn reset(&self) -> Result<(), CrustyError> {
         // if SM is temp, then delete the temp file
-        println!("and now im here in reset!");
+        //   println!("and now im here in reset!");
         if self.containers.write().is_err() || self.containers2.write().is_err() {
-            println!("reset results in ERR");
+            //   println!("reset results in ERR");
             return Err(CrustyError::ExecutionError(
                 "rest results in ERR!".to_string(),
             ));
         }
         let mut containers_unlock = self.containers.write().unwrap();
         let mut containers2_unlock = self.containers2.write().unwrap();
-        println!("and now im here in reset!");
+        // println!("and now im here in reset!");
         /*if self.is_temp {
             // extract heapfile's temp file from hashmap
             let temp_hf_file_path = containers2_unlock.g);
@@ -519,14 +523,14 @@ impl StorageTrait for StorageManager {
     fn shutdown(&self) {
         // first check if the SM is temporary, and if it's not then serialize & store its contents
         //let mut containers_unlock = self.containers.write().unwrap();
-        println!("beans!");
+        // println!("beans!");
         let mut containers2_unlock = self.containers2.write().unwrap();
         if !self.is_temp {
-            println!("self was not temp!");
+            //    println!("self was not temp!");
             // serialize the SM's hashmap w container id & heapfile file paths
             let serialized_hm =
                 serde_json::to_string(&*containers2_unlock).expect("failed to serialize");
-            println!("serialized containers2 hm: {}", serialized_hm);
+            //   println!("serialized containers2 hm: {}", serialized_hm);
             // create file path for the file that I will write serialized_hm into
             let mut new_heapfile_path = PathBuf::new();
             new_heapfile_path.push(&self.storage_path.clone());
@@ -686,14 +690,14 @@ mod test {
         for val in &byte_vec {
             sm.insert_value(cid, val.clone(), tid);
         }
-        println!("IM HERE IN HS_SM_B_ITER_SMALL 0");
+        //  println!("IM HERE IN HS_SM_B_ITER_SMALL 0");
         let iter = sm.get_iterator(cid, tid, Permissions::ReadOnly);
-        println!("IM HERE IN HS_SM_B_ITER_SMALL 0.5");
+        //   println!("IM HERE IN HS_SM_B_ITER_SMALL 0.5");
 
         for (i, x) in iter.enumerate() {
-            println!("IM HERE IN HS_SM_B_ITER_SMALL: (mine) {:?}", x);
-            println!("IM HERE IN HS_SM_B_ITER_SMALL: (correct) {:?}", byte_vec[i]);
-            // assert_eq!(byte_vec[i], x);
+            //   println!("IM HERE IN HS_SM_B_ITER_SMALL: (mine) {:?}", x);
+            //   println!("IM HERE IN HS_SM_B_ITER_SMALL: (correct) {:?}", byte_vec[i]);
+            assert_eq!(byte_vec[i], x);
         }
 
         // Should be on two pages
@@ -708,7 +712,7 @@ mod test {
             sm.insert_value(cid, val.clone(), tid);
         }
         byte_vec.append(&mut byte_vec2);
-        println!("IM HERE IN HS_SM_B_ITER_SMALL 1");
+        //println!("IM HERE IN HS_SM_B_ITER_SMALL 1");
         let iter = sm.get_iterator(cid, tid, Permissions::ReadOnly);
         for (i, x) in iter.enumerate() {
             assert_eq!(byte_vec[i], x);
@@ -725,7 +729,7 @@ mod test {
             sm.insert_value(cid, val.clone(), tid);
         }
         byte_vec.append(&mut byte_vec2);
-        println!("IM HERE IN HS_SM_B_ITER_SMALL 2");
+        // println!("IM HERE IN HS_SM_B_ITER_SMALL 2");
         let iter = sm.get_iterator(cid, tid, Permissions::ReadOnly);
         for (i, x) in iter.enumerate() {
             assert_eq!(byte_vec[i], x);

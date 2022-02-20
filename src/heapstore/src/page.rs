@@ -322,6 +322,7 @@ impl Iterator for PageIter {
             // increment my index for the next "iter"
             self.index += 1;
             // return my valid slotid
+            // println!("page: value: {:?}", result.clone());
             return Some(result);
         }
     }
