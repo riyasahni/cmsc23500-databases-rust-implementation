@@ -36,7 +36,35 @@ fn sm_insert_delete() {
     let mut rng = thread_rng();
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
-    let mut vals1 = get_random_vec_of_byte_vec(100, 50, 100);
+    let mut vals1 = get_random_vec_of_byte_vec(10, 5, 10);
+    let cid = 1;
+    sm.create_table(cid).unwrap();
+    let mut val_ids = sm.insert_values(cid, vals1.clone(), t);
+    //println!("val_ids before delete: {:?}", val_ids);
+    for _ in 0..10 {
+        let idx_to_del = rng.gen_range(0..vals1.len());
+        println!("index to delete: {}", idx_to_del);
+        println!("vals1 (before delete value): {:?}", &vals1);
+        sm.delete_value(val_ids[idx_to_del], t).unwrap();
+        // println!("val_ids after delete value: {:?}", val_ids);
+        let check_vals: Vec<Vec<u8>> = sm.get_iterator(cid, t, RO).collect();
+        // println!("vals1 (before swap_remove): {:?}", &vals1);
+        println!(
+            "check (after delete value & before swap_remove): {:?}",
+            check_vals.clone()
+        );
+        assert!(!compare_unordered_byte_vecs(&vals1, check_vals.clone()));
+        vals1.swap_remove(idx_to_del);
+        val_ids.swap_remove(idx_to_del);
+        //  println!("vals1 (after swap_remove): {:?}", &vals1);
+        // println!("check (after swap_remove): {:?}", check_vals.clone());
+        assert!(compare_unordered_byte_vecs(&vals1, check_vals));
+    }
+    /* let mut rng = thread_rng();
+    let sm = StorageManager::new_test_sm();
+    let t = TransactionId::new();
+    //let mut vals1 = get_random_vec_of_byte_vec(100, 50, 100);
+    let mut vals1 = get_random_vec_of_byte_vec(2, 50, 100);
     let cid = 1;
     sm.create_table(cid).unwrap();
     let mut val_ids = sm.insert_values(cid, vals1.clone(), t);
@@ -47,13 +75,15 @@ fn sm_insert_delete() {
         println!("just deleted value");
         let check_vals: Vec<Vec<u8>> = sm.get_iterator(cid, t, RO).collect();
         println!("created check vals");
+        println!("vals1 (before swap_remove): {:?}", &vals1);
+        println!("check (before swap_remove): {:?}", check_vals.clone());
         assert!(!compare_unordered_byte_vecs(&vals1, check_vals.clone()));
         vals1.swap_remove(idx_to_del);
         val_ids.swap_remove(idx_to_del);
         println!("vals1: {:?}", vals1);
-        println!("val_ids: {:?}", val_ids);
+        //println!("check_vals: {:?}", val_ids);
         assert!(compare_unordered_byte_vecs(&vals1, check_vals));
-    }
+    }*/
 }
 
 #[test]

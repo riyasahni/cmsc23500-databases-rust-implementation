@@ -308,28 +308,51 @@ impl StorageTrait for StorageManager {
         println!("in delete_value: before unlocking containers");
         let num_pgs = self.get_num_pages(container_id);
         let mut containers_unlock = self.containers.write().unwrap();
-        println!("in delete_value: after unlocking containers");
+        // println!("in delete_value: after unlocking containers");
         if containers_unlock.contains_key(&container_id) {
             // extract heapfile's file path from hashmap
-            println!("in delete_value: before getting heapfile");
+            //   println!("in delete_value: before getting heapfile");
             let hf = containers_unlock.get(&container_id).unwrap();
-            println!("in delete_value: after getting heapfile");
+            //   println!("in delete_value: after getting heapfile");
             // check if page with given page id exists & extract
             if page_id <= num_pgs - 1 {
-                println!("in delete_value: checked if page w given pid exists");
+                //  println!("in delete_value: checked if page w given pid exists");
                 // extract page with given page_id
                 let mut extracted_page = HeapFile::read_page_from_file(&hf, page_id).unwrap();
-                println!("in delete_value: extracted page");
-                // delete_value() on page for given slot_id if the corresponding record exists
-                Page::delete_value(&mut extracted_page, slot_id);
-                println!("in delete_value: deleted value from page");
-                // reinsert back into heapfile
-                // drop(containers_unlock);
-                //self.write_page(container_id, extracted_page, tid);
-                // write page to file
-                hf.write_page_to_file(extracted_page);
-                println!("in delete_value: wrote new page to file");
-                //HeapFile::write_page_to_file(&hf, extracted_page);
+                //  println!("in delete_value: extracted page");
+                // check if slot_id exists in page
+                println!(
+                    "delete_value: extracted page -- {:?}",
+                    Page::get_bytes(&extracted_page)
+                );
+                let num_valid_records = Page::return_num_of_valid_records(&mut extracted_page);
+                /*println!(
+                    "in delete_value: # of valid records on page: {}",
+                    num_valid_records
+                );*/
+                if num_valid_records == 0 {
+                    println!("in deleted value: no records on page");
+                    return Ok(());
+                }
+                if slot_id < num_valid_records {
+                    // delete_value() on page for given slot_id if the corresponding record exists
+                    Page::delete_value(&mut extracted_page, slot_id);
+                    println!("in delete_value: deleted value from page");
+                    // write page to file
+                    println!(
+                        "delete_value: extracted page -- {:?}",
+                        Page::get_bytes(&extracted_page)
+                    );
+                    println!(
+                        "delete value: get_value for non-deleted slot ids.. {:?}",
+                        Page::get_value(&extracted_page, slot_id + 2).unwrap()
+                    );
+                    hf.write_page_to_file(extracted_page);
+                    //println!("in delete_value: wrote new page to file");
+                    //HeapFile::write_page_to_file(&hf, extracted_page);
+                    drop(containers_unlock);
+                    return Ok(());
+                }
             }
             //drop(containers_unlock);
         }

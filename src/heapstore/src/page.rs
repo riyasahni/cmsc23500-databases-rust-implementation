@@ -147,8 +147,17 @@ impl Page {
         for i in (slot_id + 1) as usize..self.header.vec_of_records.len() {
             // get the records after the one I've just deleted
             let rec = &mut self.header.vec_of_records[i];
+            println!(
+                "page: record_beg location after one I just deleted: {}",
+                rec.beg_location
+            );
             // now shift the actual data for that record in the page down, too
             for byte in rec.beg_location..rec.end_location {
+                println!(
+                    "page: new location for data: {}",
+                    self.data[(byte + deleted_record_length) as usize]
+                );
+                println!("page: shifted data: {}", self.data[byte as usize]);
                 self.data[(byte + deleted_record_length) as usize] = self.data[byte as usize];
             }
             // shift the beginning and end locations of the record stored in header down
@@ -157,6 +166,8 @@ impl Page {
             // then update the end of free space
             self.header.ptr_to_end_of_free_space += deleted_record_length;
         }
+        println!("page: get_bytes: {:?}", self.get_bytes());
+
         Some(())
     }
 
@@ -226,7 +237,8 @@ impl Page {
         }
         // now clone in the rest of the actual page data starting from the end of the page's free space
         let mut page_data = &self.data[self.header.ptr_to_end_of_free_space as usize..PAGE_SIZE];
-        final_vec[self.header.ptr_to_end_of_free_space as usize..].clone_from_slice(&page_data);
+        final_vec[self.header.ptr_to_end_of_free_space as usize..PAGE_SIZE]
+            .clone_from_slice(&page_data);
         // return final vector
         final_vec.to_vec()
     }
@@ -280,6 +292,22 @@ impl Page {
         // return deserialized vector of records
         deserialized_vec_of_records
     }
+
+    /// Utility function that returns the number of valid records in a page
+    pub fn return_num_of_valid_records(&mut self) -> u16 {
+        // create a new vector which will contain all my non-deleted records
+        let mut valid_records = Vec::new();
+        // iterate through existing vector of records in header function
+        for i in 0..self.header.vec_of_records.len() {
+            // check if we're on the record that corresponds with this index
+            // check if the record is deleted or not
+            if self.header.vec_of_records[i].is_deleted == 0 {
+                // if record is not deleted, add record to my valid_records vector
+                valid_records.push(&self.header.vec_of_records[i]);
+            }
+        }
+        valid_records.len() as u16
+    }
 }
 
 /// The (consuming) iterator struct for a page.
@@ -307,9 +335,14 @@ impl Iterator for PageIter {
             }
         }
         // now, check if I still have enough valid records to return based on "index"
+        //println!("Page: # of records: {}", valid_records.len() - 1);
+        if valid_records.is_empty() {
+            // println!("page: no valid records");
+            return None;
+        }
         if self.index > valid_records.len() - 1 {
             // if I'm out of valid records, return 'None'
-            //    println!("PAGE: out of records: {}", self.index);
+            //println!("PAGE: out of records: {}", self.index);
             return None;
         } else {
             // else, save my valid slotid picked at index
