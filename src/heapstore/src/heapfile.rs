@@ -140,7 +140,7 @@ impl HeapFile {
         let page_bytes: &[u8] = &Page::get_bytes(&page);
         // write/clone bytes into the heapfile
         file.write(page_bytes);
-
+        drop(file);
         Ok(())
     }
 }

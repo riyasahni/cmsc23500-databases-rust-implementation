@@ -42,11 +42,16 @@ fn sm_insert_delete() {
     let mut val_ids = sm.insert_values(cid, vals1.clone(), t);
     for _ in 0..10 {
         let idx_to_del = rng.gen_range(0..vals1.len());
+        println!("idx_to_del: {}", idx_to_del);
         sm.delete_value(val_ids[idx_to_del], t).unwrap();
+        println!("just deleted value");
         let check_vals: Vec<Vec<u8>> = sm.get_iterator(cid, t, RO).collect();
+        println!("created check vals");
         assert!(!compare_unordered_byte_vecs(&vals1, check_vals.clone()));
         vals1.swap_remove(idx_to_del);
         val_ids.swap_remove(idx_to_del);
+        println!("vals1: {:?}", vals1);
+        println!("val_ids: {:?}", val_ids);
         assert!(compare_unordered_byte_vecs(&vals1, check_vals));
     }
 }

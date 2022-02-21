@@ -48,14 +48,17 @@ impl StorageManager {
             let hf_free_space_map = HeapFile::build_free_space_map_for_heapfile(&hf);
 
             if hf_free_space_map.is_empty() {
+                drop(hf_free_space_map);
                 drop(containers_unlock);
                 return None;
             }
             if page_id > (hf_free_space_map.len() - 1) as u16 {
+                drop(hf_free_space_map);
                 drop(containers_unlock);
                 return None;
             }
             // if page_id exists, then read page from file & return the page
+            drop(hf_free_space_map);
             return Some(HeapFile::read_page_from_file(&hf, page_id).unwrap());
         }
         drop(containers_unlock);
@@ -73,11 +76,14 @@ impl StorageManager {
         // extract the heapfile corresponding with container_id
         if containers_unlock.get(&container_id).is_none() {
             //  println!("SM write_page: hf is none"); //WHY??
+            drop(containers_unlock);
             return Ok(());
         }
         let hf = containers_unlock.get(&container_id).unwrap();
         // write page to file
-        hf.write_page_to_file(page)
+        hf.write_page_to_file(page);
+        drop(containers_unlock);
+        Ok(())
         //   panic!("TODO milestone hs");
     }
 
@@ -87,8 +93,11 @@ impl StorageManager {
         if containers_unlock.contains_key(&container_id) {
             let hf = containers_unlock.get(&container_id).unwrap();
             let num_pages = HeapFile::num_pages(hf);
-            num_pages
+            let num_pgs_copy = num_pages.clone();
+            drop(containers_unlock);
+            num_pgs_copy
         } else {
+            drop(containers_unlock);
             panic!("container id does not exist in container!");
         }
     }
@@ -247,8 +256,6 @@ impl StorageTrait for StorageManager {
                 continue;
             }
             self.write_page(container_id, page, tid);
-            //HeapFile::write_page_to_file(&self, page)
-
             return ValueId {
                 container_id,
                 segment_id: None,
@@ -261,7 +268,7 @@ impl StorageTrait for StorageManager {
         let mut slot_id = new_page.add_value(&value);
 
         self.write_page(container_id, new_page, tid);
-
+        //drop(new_page);
         return ValueId {
             container_id,
             segment_id: None,
@@ -293,24 +300,40 @@ impl StorageTrait for StorageManager {
 
     /// Delete the data for a value. If the valueID is not found it returns Ok() still.
     fn delete_value(&self, id: ValueId, tid: TransactionId) -> Result<(), CrustyError> {
+        println!("in delete_value");
         let container_id = id.container_id;
         let page_id = id.page_id.unwrap();
         let slot_id = id.slot_id.unwrap();
         // find the heapfile associated with container_id that's stored in ValueID
+        println!("in delete_value: before unlocking containers");
+        let num_pgs = self.get_num_pages(container_id);
         let mut containers_unlock = self.containers.write().unwrap();
+        println!("in delete_value: after unlocking containers");
         if containers_unlock.contains_key(&container_id) {
             // extract heapfile's file path from hashmap
+            println!("in delete_value: before getting heapfile");
             let hf = containers_unlock.get(&container_id).unwrap();
+            println!("in delete_value: after getting heapfile");
             // check if page with given page id exists & extract
-            if page_id <= self.get_num_pages(container_id) - 1 {
+            if page_id <= num_pgs - 1 {
+                println!("in delete_value: checked if page w given pid exists");
                 // extract page with given page_id
                 let mut extracted_page = HeapFile::read_page_from_file(&hf, page_id).unwrap();
+                println!("in delete_value: extracted page");
                 // delete_value() on page for given slot_id if the corresponding record exists
                 Page::delete_value(&mut extracted_page, slot_id);
+                println!("in delete_value: deleted value from page");
                 // reinsert back into heapfile
-                return HeapFile::write_page_to_file(&hf, extracted_page);
+                // drop(containers_unlock);
+                //self.write_page(container_id, extracted_page, tid);
+                // write page to file
+                hf.write_page_to_file(extracted_page);
+                println!("in delete_value: wrote new page to file");
+                //HeapFile::write_page_to_file(&hf, extracted_page);
             }
+            //drop(containers_unlock);
         }
+        drop(containers_unlock);
         Ok(())
         //  panic!("TODO milestone hs");
     }
@@ -377,6 +400,8 @@ impl StorageTrait for StorageManager {
         // else, insert new heapfile (value) with given container_id (key)
         containers.insert(container_id, Arc::new(new_hf));
         containers2.insert(container_id, hf_file_path);
+        drop(containers);
+        drop(containers2);
         Ok(())
         // panic!("TODO milestone hs");
     }
