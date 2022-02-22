@@ -147,26 +147,26 @@ impl Page {
         for i in (slot_id + 1) as usize..self.header.vec_of_records.len() {
             // get the records after the one I've just deleted
             let rec = &mut self.header.vec_of_records[i];
-            println!(
+            /*println!(
                 "page: record_beg location after one I just deleted: {}",
                 rec.beg_location
-            );
+            );*/
             // now shift the actual data for that record in the page down, too
             for byte in rec.beg_location..rec.end_location {
-                println!(
+                /*println!(
                     "page: new location for data: {}",
                     self.data[(byte + deleted_record_length) as usize]
-                );
-                println!("page: shifted data: {}", self.data[byte as usize]);
+                );*/
+                //println!("page: shifted data: {}", self.data[byte as usize]);
                 self.data[(byte + deleted_record_length) as usize] = self.data[byte as usize];
             }
             // shift the beginning and end locations of the record stored in header down
             rec.end_location += deleted_record_length;
             rec.beg_location += deleted_record_length;
-            // then update the end of free space
-            self.header.ptr_to_end_of_free_space += deleted_record_length;
         }
-        println!("page: get_bytes: {:?}", self.get_bytes());
+        // then update the end of free space
+        self.header.ptr_to_end_of_free_space += deleted_record_length;
+        //println!("page: get_bytes: {:?}", self.get_bytes());
 
         Some(())
     }
