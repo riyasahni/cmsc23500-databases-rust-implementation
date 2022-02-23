@@ -386,15 +386,15 @@ impl StorageTrait for StorageManager {
         id: ValueId,
         _tid: TransactionId,
     ) -> Result<ValueId, CrustyError> {
-        /*
         let container_id = id.container_id;
         let page_id = id.page_id.unwrap();
         let slot_id = id.slot_id.unwrap();
+        println!("update_value: value: {:?}", value);
         // first delete the record
         self.delete_value(id, _tid);
         // then re-insert record into heapfile
-        Ok(self.insert_value(container_id, value, _tid))*/
-        panic!("TODO milestone hs");
+        Ok(self.insert_value(container_id, value, _tid))
+        //panic!("TODO milestone hs");
     }
 
     /// Create a new container to be stored.
