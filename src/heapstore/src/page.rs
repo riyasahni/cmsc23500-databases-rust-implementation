@@ -52,7 +52,7 @@ impl Page {
     /// Attempts to add a new value to this page if there is space available.
     pub fn add_value(&mut self, bytes: &[u8]) -> Option<SlotId> {
         // check to see if there is enough space in the page to add the new record
-        if self.get_largest_free_contiguous_space() >= bytes.len() {
+        if self.get_largest_free_contiguous_space() >= bytes.len() + 5 {
             // record's beginning location is offset - record's length
             let new_beg_location = self.header.ptr_to_end_of_free_space - bytes.len() as u16;
             // record's end location is what the end of free space used to be
@@ -130,6 +130,8 @@ impl Page {
 
     /// Delete the bytes/slot for the slotId.
     pub fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
+        // create bool to check if slot was deleted eventually or not
+        let mut was_deleted = false;
         // check if slot_id exists in vector of records
         if slot_id > (self.header.vec_of_records.len() - 1) as u16 {
             println!("in PAGE delete_value: slot id does not exist in vector of records");
@@ -142,11 +144,35 @@ impl Page {
         };
         // if record is not already deleted, then delete it
         let deleted_record = &mut self.header.vec_of_records[slot_id as usize];
+        let deleted_record_beg_loc = deleted_record.beg_location.clone();
+        let deleted_record_end_loc = deleted_record.end_location.clone();
         deleted_record.is_deleted = 1;
-        // now fill in the gap caused by the deleted record by shifting all records
-        // with a higher slot_id forward
+        // now fill in the gap caused by the deleted record by shifting all valid records
+        // with a higher beg_location forward
         let deleted_record_length = deleted_record.end_location - deleted_record.beg_location;
-        for i in (slot_id + 1) as usize..self.header.vec_of_records.len() {
+
+        for i in 0..self.header.vec_of_records.len() {
+            let rec = &mut self.header.vec_of_records[i];
+            // check if record is valid and was above the deleted record (regardless of its slot id)
+            if rec.is_deleted.clone() == 0 && rec.beg_location.clone() < deleted_record_beg_loc {
+                // updated bool to indicate slot was eventually deleted
+                was_deleted = true;
+                // now shift the actual data for that record in the page down, too
+                for byte in rec.beg_location..rec.end_location {
+                    self.data[(byte + deleted_record_length) as usize] = self.data[byte as usize];
+                }
+                // shift the beginning and end locations of the record stored in header down
+                rec.end_location += deleted_record_length;
+                rec.beg_location += deleted_record_length;
+            }
+        }
+        // then update the end of free space if slot was eventually deleted
+        if was_deleted {
+            self.header.ptr_to_end_of_free_space += deleted_record_length;
+        }
+
+        ///////////////////////---- MY OLD CODE ----////////////////////////////////
+        /*for i in (slot_id + 1) as usize..self.header.vec_of_records.len() {
             // get the records after the one I've just deleted
             let rec = &mut self.header.vec_of_records[i];
             /*println!(
@@ -170,6 +196,8 @@ impl Page {
         self.header.ptr_to_end_of_free_space += deleted_record_length;
         //println!("page: get_bytes: {:?}", self.get_bytes());
 
+        Some(())*/
+        ///////////////////////---- MY OLD CODE ----////////////////////////////////
         Some(())
     }
 
