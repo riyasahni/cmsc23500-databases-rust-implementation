@@ -51,8 +51,89 @@ impl Page {
 
     /// Attempts to add a new value to this page if there is space available.
     pub fn add_value(&mut self, bytes: &[u8]) -> Option<SlotId> {
+        // first check to see if new record info can reuse an existing slot in header id
+        // or if new record info will increase the header size by 5 bytes
+        let mut reuse_slotid = false;
+        for j in 0..self.header.vec_of_records.len() {
+            if self.header.vec_of_records[j].is_deleted == 1 {
+                reuse_slotid = true;
+                break;
+            }
+        }
         // check to see if there is enough space in the page to add the new record
-        if self.get_largest_free_contiguous_space() >= bytes.len() + 5 {
+        if reuse_slotid && self.get_largest_free_contiguous_space() >= bytes.len() {
+            // record's beginning location is offset - record's length
+            let new_beg_location = self.header.ptr_to_end_of_free_space - bytes.len() as u16;
+            // record's end location is what the end of free space used to be
+            let new_end_location = self.header.ptr_to_end_of_free_space;
+            println!(
+                " add_value: old ptr_end_of_free_space: {} ",
+                self.header.ptr_to_end_of_free_space
+            );
+            println!(
+                "add_value: new record beginning location: {}",
+                new_beg_location
+            );
+            println!("add_value: new record end location: {}", new_end_location);
+            // reuse slot id of deleted record by inserting new record info in the
+            // deleted vector's index
+            for j in 0..self.header.vec_of_records.len() {
+                if self.header.vec_of_records[j].is_deleted == 1 {
+                    // if record has been deleted, the new record takes its slot id
+                    self.header.vec_of_records[j].beg_location = new_beg_location;
+                    self.header.vec_of_records[j].end_location = new_end_location;
+                    // update the is_deleted flag
+                    self.header.vec_of_records[j].is_deleted = 0;
+                    // save the new record's slot id
+                    let new_slotid = j;
+                    // copy new record data into the page at the new beginning location
+                    self.data[new_beg_location as usize..new_end_location as usize]
+                        .clone_from_slice(&bytes);
+                    // update the ptr_to_end_of_free_space
+                    self.header.ptr_to_end_of_free_space = new_beg_location;
+                    println!(
+                        " add_value: new ptr_end_of_free_space: {} ",
+                        self.header.ptr_to_end_of_free_space
+                    );
+                    // return the new slot id for the new record!
+                    return Some(new_slotid as u16);
+                }
+            }
+            // if no space in existing page, then return None
+            return None;
+            // otherwise do we have space to increase the header size for the new record?
+        } else if self.get_largest_free_contiguous_space() >= bytes.len() + 5 {
+            // record's beginning location is offset - record's length
+            let new_beg_location = self.header.ptr_to_end_of_free_space - bytes.len() as u16;
+            // record's end location is what the end of free space used to be
+            let new_end_location = self.header.ptr_to_end_of_free_space;
+            // create a new record
+            let new_record = Record {
+                beg_location: new_beg_location,
+                end_location: new_end_location,
+                is_deleted: 0,
+            };
+            // push new record into vector of records
+            // the index of the new_record is its slot id
+            self.header.vec_of_records.push(new_record);
+            // update the ptr_to_end_of_free_space
+            self.header.ptr_to_end_of_free_space = new_beg_location;
+            // update the ptr_to_beg_of_free_space
+            self.header.ptr_to_beg_of_free_space += 5;
+            // copy new record data into the page at the new beginning location
+            self.data[new_beg_location as usize..new_end_location as usize]
+                .clone_from_slice(&bytes);
+            // save the new record's slot id
+            let new_slotid = self.header.vec_of_records.len() - 1;
+            // return the new slot id for the new record!
+            return Some(new_slotid.try_into().unwrap());
+        }
+        // if no space for new record, return None
+        return None;
+        ////////////////// ----- MY OLD WORKING CODE ----- ///////////////////////////////////////////////
+        /*if self.get_largest_free_contiguous_space() >= bytes.len() + 5 {
+            // ONLY ADD 5 WHEN WE NEED TO ADD A NEW R
+            // RECORD TO THE VECTOR OF RECORDS
             // record's beginning location is offset - record's length
             let new_beg_location = self.header.ptr_to_end_of_free_space - bytes.len() as u16;
             // record's end location is what the end of free space used to be
@@ -99,7 +180,8 @@ impl Page {
             Some(new_slotid.try_into().unwrap())
         } else {
             None
-        }
+        }*/
+        ////////////////// ----- MY OLD WORKING CODE ----- ///////////////////////////////////////////////
     }
 
     /// Return the bytes for the slotId. If the slotId is not valid then return None

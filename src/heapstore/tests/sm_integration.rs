@@ -39,7 +39,7 @@ fn sm_insert_delete() {
     let mut rng = thread_rng();
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
-    let mut vals1 = get_random_vec_of_byte_vec(75, 50, 100);
+    let mut vals1 = get_random_vec_of_byte_vec(100, 50, 100);
     let cid = 1;
     sm.create_table(cid).unwrap();
     let mut val_ids = sm.insert_values(cid, vals1.clone(), t);
@@ -67,7 +67,7 @@ fn sm_insert_updates() {
     let mut rng = thread_rng();
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
-    let mut vals1 = get_random_vec_of_byte_vec(70, 50, 100);
+    let mut vals1 = get_random_vec_of_byte_vec(100, 50, 100);
     let cid = 1;
     sm.create_table(cid).unwrap();
     let mut val_ids = sm.insert_values(cid, vals1.clone(), t);
