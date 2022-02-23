@@ -16,7 +16,8 @@ pub struct HeapFileIterator {
     container_id: ContainerId,
     transaction_id: TransactionId,
     page_index: u16,
-    slot_index: u16,
+    p_iter: PageIter,
+    //slot_index: u16,
 }
 
 /// Required HeapFileIterator functions
@@ -24,13 +25,18 @@ impl HeapFileIterator {
     /// Create a new HeapFileIterator that stores the container_id, tid, and heapFile pointer.
     /// This should initialize the state required to iterate through the heap file.
     pub(crate) fn new(container_id: ContainerId, tid: TransactionId, hf: Arc<HeapFile>) -> Self {
+        let new_p_iter = PageIter {
+            page: hf.read_page_from_file(0).unwrap(),
+            index: 0,
+        };
         // just need to create a new heapfile-iter here and return it...
         let new_HeapFileIter = HeapFileIterator {
             heapfile: hf,
             container_id: container_id,
             transaction_id: tid,
             page_index: 0,
-            slot_index: 0,
+            p_iter: new_p_iter,
+            //slot_index: 0,
         };
         new_HeapFileIter
     }
@@ -50,36 +56,23 @@ impl Iterator for HeapFileIterator {
             // if there are no pages in heapfile, return none
             return None;
         }
-
-        // save the page we want to iterate
-        let page_to_iterate: Page = match self
-            .heapfile
-            .read_page_from_file(self.page_index.try_into().unwrap())
-        {
-            Ok(page_to_iterate) => page_to_iterate,
-            Err(_) => return None,
-        };
-
-        let num_records = page_to_iterate.header.vec_of_records.len();
-        let mut p_iter = page_to_iterate.into_iter();
-
-        // iterate through page
-        let mut copyslot = self.slot_index;
-        // println!("heapfileiter: slot index: {}", self.slot_index);
-        // println!("heapfileiter: num of recs: {}", num_records);
-        if self.slot_index >= num_records as u16 {
+        // first check if I need to read a new page
+        let next_val = self.p_iter.next();
+        // if next value to read is done, it means we've finished reading this page
+        if next_val.is_none() {
+            // move to next page
             self.page_index += 1;
-            self.slot_index = 0;
-            return self.next();
-        } else {
-            for i in 0..self.slot_index as u16 {
-                // if out of records, move to next page
-                copyslot -= 1;
-                p_iter.next();
+            if self.page_index as u16 >= num_pages {
+                // if there are no pages in heapfile, return none
+                return None;
             }
-            self.slot_index += 1;
-            return p_iter.next();
-            println!("about to panic lmao");
+
+            let new_page = hf.read_page_from_file(self.page_index).unwrap();
+            self.p_iter.page = new_page;
+            // reset page index
+            self.p_iter.index = 0;
+            return self.next();
         }
+        return next_val;
     }
 }

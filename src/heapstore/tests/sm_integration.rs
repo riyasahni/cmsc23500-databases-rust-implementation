@@ -39,7 +39,7 @@ fn sm_insert_delete() {
     let mut rng = thread_rng();
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
-    let mut vals1 = get_random_vec_of_byte_vec(100, 50, 100);
+    let mut vals1 = get_random_vec_of_byte_vec(75, 50, 100);
     let cid = 1;
     sm.create_table(cid).unwrap();
     let mut val_ids = sm.insert_values(cid, vals1.clone(), t);
@@ -51,10 +51,11 @@ fn sm_insert_delete() {
         assert!(!compare_unordered_byte_vecs(&vals1, check_vals.clone()));
         vals1.swap_remove(idx_to_del);
         val_ids.swap_remove(idx_to_del);
-        println!("in sm_integration vals1: {:?}", vals1);
-        println!("");
-        println!("");
-        println!("in sm_integration check_vals: {:?}", check_vals);
+        // println!("in sm_integration vals1: {:?}", vals1);
+        // println!("");
+        // println!("");
+        // println!("in sm_integration check_vals: {:?}", check_vals);
+        // println!("in sm_integration: get_value for idx_to_del {:?}", )
         assert!(compare_unordered_byte_vecs(&vals1, check_vals));
     }
 }

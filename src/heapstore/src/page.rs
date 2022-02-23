@@ -213,6 +213,20 @@ impl Page {
     /// Delete the bytes/slot for the slotId.
     pub fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
         // create bool to check if slot was deleted eventually or not
+        println!(
+            "in PAGE delete_value: printing page bytes before delete: {:?}",
+            self.get_bytes()
+        );
+        println!("");
+        println!("--------------------------------------------------------");
+        println!("");
+        println!(
+            "in PAGE delete_value: printing value to delete: {:?}",
+            self.get_value(slot_id)
+        );
+        println!("");
+        println!("--------------------------------------------------------");
+        println!("");
         let mut was_deleted = false;
         // check if slot_id exists in vector of records
         if slot_id > (self.header.vec_of_records.len() - 1) as u16 {
@@ -228,7 +242,8 @@ impl Page {
         let deleted_record = &mut self.header.vec_of_records[slot_id as usize];
         let deleted_record_beg_loc = deleted_record.beg_location.clone();
         let deleted_record_end_loc = deleted_record.end_location.clone();
-        deleted_record.is_deleted = 1;
+        //self.header.vec_of_records[slot_id as usize].is_deleted = 1;
+        //deleted_record.is_deleted = 1;
         // now fill in the gap caused by the deleted record by shifting all valid records
         // with a higher beg_location forward
         let deleted_record_length = deleted_record.end_location - deleted_record.beg_location;
@@ -280,6 +295,10 @@ impl Page {
 
         Some(())*/
         ///////////////////////---- MY OLD CODE ----////////////////////////////////
+        println!(
+            "in PAGE delete_value: printing page bytes after delete: {:?}",
+            self.get_bytes()
+        );
         Some(())
     }
 
@@ -425,9 +444,9 @@ impl Page {
 /// The (consuming) iterator struct for a page.
 /// This should iterate through all valid values of the page.
 /// See https://stackoverflow.com/questions/30218886/how-to-implement-iterator-and-intoiterator-for-a-simple-struct
-pub struct PageIter {
-    page: Page,
-    index: usize,
+pub(crate) struct PageIter {
+    pub page: Page,
+    pub index: usize,
 }
 
 /// The implementation of the (consuming) page iterator.

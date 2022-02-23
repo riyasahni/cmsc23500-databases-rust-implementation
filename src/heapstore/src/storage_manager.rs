@@ -237,14 +237,13 @@ impl StorageTrait for StorageManager {
         }
         let num_pages = self.get_num_pages(container_id);
         // sift through pages in heapfile
+        let containers_unlock = self.containers.read().unwrap();
+        let hf = containers_unlock.get(&container_id).unwrap();
         for i in 0..num_pages {
-            if num_pages == 0 {
-                continue;
-            }
             // if an existing page has space for record, insert it
             //    println!("SM inserts: before getting page");
-            let mut page =
-                Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
+            let mut page = HeapFile::read_page_from_file(hf, i).unwrap();
+            //Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
             let record_id = page.add_value(&value);
             //     println!("SM inserts: after getting page");
             //page.add_value(&value);
@@ -254,7 +253,8 @@ impl StorageTrait for StorageManager {
                 // println!("SM inserts:nothing added to page...");
                 continue;
             }
-            self.write_page(container_id, page, tid);
+            //self.write_page(container_id, page, tid);
+            hf.write_page_to_file(page);
             return ValueId {
                 container_id,
                 segment_id: None,
@@ -266,7 +266,8 @@ impl StorageTrait for StorageManager {
         let mut new_page = Page::new(num_pages);
         let mut slot_id = new_page.add_value(&value);
 
-        self.write_page(container_id, new_page, tid);
+        //self.write_page(container_id, new_page, tid);
+        hf.write_page_to_file(new_page);
         //drop(new_page);
         return ValueId {
             container_id,
@@ -806,6 +807,7 @@ mod test {
 
         let vals = get_random_vec_of_byte_vec(1000, 40, 400);
         sm.insert_values(cid, vals, tid);
+        println!("i got here");
         let mut count = 0;
         for _ in sm.get_iterator(cid, tid, Permissions::ReadOnly) {
             count += 1;
