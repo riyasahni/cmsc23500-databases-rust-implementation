@@ -203,6 +203,7 @@ pub fn get_random_vec_of_byte_vec(n: usize, min_size: usize, max_size: usize) ->
 pub fn compare_unordered_byte_vecs(a: &[Vec<u8>], mut b: Vec<Vec<u8>>) -> bool {
     // Quick check
     if a.len() != b.len() {
+        println!("unordered bytes are of inequal lengths");
         return false;
     }
     // check if they are the same ordered
@@ -212,6 +213,7 @@ pub fn compare_unordered_byte_vecs(a: &[Vec<u8>], mut b: Vec<Vec<u8>>) -> bool {
         .filter(|&(j, k)| j[..] != k[..])
         .count();
     if non_match_count == 0 {
+        println!("unordered bytes are not the same order");
         return true;
     }
 

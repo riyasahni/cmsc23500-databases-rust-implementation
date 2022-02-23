@@ -139,11 +139,10 @@ impl StorageTrait for StorageManager {
         //let mut storage_path_PathBuf = PathBuf::new();
         //storage_path_PathBuf.push(storage_path.clone());
 
-        if Path::new(&(storage_path + &"/serialized_hm.json".to_owned())).exists() {
+        if Path::new(&(storage_path + &"/serialized_hm".to_owned())).exists() {
             // get the file path for the serialized heapfile info
-            let serialized_file =
-                fs::File::open(storage_path_copy + &"/serialized_hm.json".to_owned())
-                    .expect("error opening file");
+            let serialized_file = fs::File::open(storage_path_copy + &"/serialized_hm".to_owned())
+                .expect("error opening file");
             // open up the serialized hf for this SM directory
             // println!("I am in here now! so apparenly file also exists!");
 
@@ -309,13 +308,19 @@ impl StorageTrait for StorageManager {
         let num_pgs = self.get_num_pages(container_id);
         let mut containers_unlock = self.containers.write().unwrap();
         // println!("in delete_value: after unlocking containers");
+        println!("in deleted value: inside delete_value");
         if containers_unlock.contains_key(&container_id) {
+            println!("in deleted value: heapfile exists for given container id");
             // extract heapfile's file path from hashmap
             //   println!("in delete_value: before getting heapfile");
             let hf = containers_unlock.get(&container_id).unwrap();
             //   println!("in delete_value: after getting heapfile");
             // check if page with given page id exists & extract
             if page_id <= num_pgs - 1 {
+                println!(
+                    "in deleted value: page with given page id exists: {}",
+                    page_id
+                );
                 //  println!("in delete_value: checked if page w given pid exists");
                 // extract page with given page_id
                 let mut extracted_page = HeapFile::read_page_from_file(&hf, page_id).unwrap();
@@ -340,6 +345,7 @@ impl StorageTrait for StorageManager {
                     let page_record = &extracted_page.header.vec_of_records[slot_id as usize];
                     // check if page_record is valid (not deleted)
                     if page_record.is_deleted == 0 {
+                        println!("in deleted value: record to delete is valid");
                         // delete_value() on page for given slot_id if the corresponding record exists
                         Page::delete_value(&mut extracted_page, slot_id);
                         //println!("in delete_value: deleted value from page");
@@ -358,7 +364,11 @@ impl StorageTrait for StorageManager {
                         drop(containers_unlock);
                         return Ok(());
                     }
+                    println!("in deleted value: slot wasnt valid");
                 }
+                println!(
+                    "in deleted value: (slot_id was not < num_records) value was never deleted..."
+                );
             }
             //drop(containers_unlock);
         }
@@ -548,17 +558,10 @@ impl StorageTrait for StorageManager {
         }
         let mut containers_unlock = self.containers.write().unwrap();
         let mut containers2_unlock = self.containers2.write().unwrap();
-        // println!("and now im here in reset!");
-        /*if self.is_temp {
-            // extract heapfile's temp file from hashmap
-            let temp_hf_file_path = containers2_unlock.g);
-            // remove the file!
-            fs::remove_file(temp_hf_file_path);
-        }*/
         // just reset the SM hashmap. Everything else stays the same.
         containers_unlock.clear();
         containers2_unlock.clear();
-
+        drop(&self);
         Ok(())
         //  panic!("TODO milestone hs");
     }
@@ -588,7 +591,7 @@ impl StorageTrait for StorageManager {
             // create file path for the file that I will write serialized_hm into
             let mut new_heapfile_path = PathBuf::new();
             new_heapfile_path.push(&self.storage_path.clone());
-            new_heapfile_path.push("serialized_hm.json");
+            new_heapfile_path.push("serialized_hm");
             let mut serialized_hm_file = fs::File::create(new_heapfile_path).unwrap();
             // write the serialized info into the file
             serialized_hm_file.write(serialized_hm.as_bytes());
@@ -685,9 +688,10 @@ impl Drop for StorageManager {
     /// Shutdown the storage manager. Can call be called by shutdown. Should be safe to call multiple times.
     /// If temp, this should remove all stored files.
     fn drop(&mut self) {
-        /*if self.is_temp {
-            self.reset()
-        }*/
+        if self.is_temp {
+            debug!("Removing storage path on drop {}", self.storage_path);
+            fs::remove_dir_all(self.storage_path.clone()).unwrap();
+        }
         self.shutdown()
         // panic!("TODO milestone hs");
     }

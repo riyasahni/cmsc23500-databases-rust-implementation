@@ -134,6 +134,7 @@ impl HeapFile {
         let mut file = &mut self.hf_file_object.write().unwrap();
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = page.get_page_id() as u64 * PAGE_SIZE as u64;
+        //println!("in heapfile: page_offset: {}", page_offset);
         // move cursor to the page_offset position in the file
         file.seek(SeekFrom::Start(page_offset as u64))?;
         // convert page to a vector of bytes

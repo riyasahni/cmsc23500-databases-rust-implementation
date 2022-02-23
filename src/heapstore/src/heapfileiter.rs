@@ -41,34 +41,6 @@ impl HeapFileIterator {
 impl Iterator for HeapFileIterator {
     type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
-        /*let num_pages = self.heapfile.num_pages();
-        if self.page_index >= num_pages {
-            None
-        } else {
-            let p = match self
-                .heapfile
-                .read_page_from_file(self.page_index.try_into().unwrap())
-            {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let num_slots = p.header.vec_of_records.len().clone() as u16;
-            let mut iter = p.into_iter();
-            if self.slot_index < num_slots {
-                if self.slot_index > 0 {
-                    for _ in 0..self.slot_index {
-                        iter.next();
-                    }
-                }
-                self.slot_index += 1;
-                return iter.next();
-            } else {
-                self.slot_index = 0;
-                self.page_index += 1;
-                return self.next();
-            }
-        }*/
-
         // open heapfile
         let hf = &self.heapfile;
         let num_pages = hf.num_pages();

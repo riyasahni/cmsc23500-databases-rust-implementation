@@ -132,10 +132,12 @@ impl Page {
     pub fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
         // check if slot_id exists in vector of records
         if slot_id > (self.header.vec_of_records.len() - 1) as u16 {
+            println!("in PAGE delete_value: slot id does not exist in vector of records");
             return None;
         };
         // check if record with slot_id is not already deleted
         if self.header.vec_of_records[slot_id as usize].is_deleted == 1 {
+            println!("in PAGE delete_value: slot id was already deleted");
             return None;
         };
         // if record is not already deleted, then delete it
