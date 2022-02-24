@@ -107,7 +107,7 @@ impl Iterator for HeapFileIterator {
                 );
                 return None;
             }
-
+            // extract the new page
             let new_page = hf.read_page_from_file(self.page_index).unwrap();
             self.p_iter.page = new_page;
             // reset page index

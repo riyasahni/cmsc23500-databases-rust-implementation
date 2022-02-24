@@ -163,9 +163,6 @@ impl StorageTrait for StorageManager {
                 // println!("SM NEW hf contents: {:?}", hf.free_space_map);
                 containers.insert(*c_id, Arc::new(hf));
             }
-            /*for (key, val) in containers.clone().iter() {
-                println!("SM NEW CONTAINERS: {} -> {:?}", key, val.hf_file_path);
-            }*/
 
             // recreate the SM
             let reloaded_SM = StorageManager {
@@ -198,20 +195,6 @@ impl StorageTrait for StorageManager {
     /// when it leaves scope.
     fn new_test_sm() -> Self {
         let storage_path = gen_random_dir().to_string_lossy().to_string();
-        //  println!("storage path: {:?}", storage_path);
-        /*let storage_path = fs::create_dir_all("/some/dir");
-        match storage_path {
-            Result() => {
-                let path = storage_path.to_string();
-                let test_SM = StorageManager::new(path);
-                // return test SM
-                return test_SM;
-            }
-            _ => panic!("cannot make temp SM"),
-        }*/
-        //    let storage_path_str =
-        //debug!("Making new temp storage_manager {}", storage_path);
-        // use new() and storage_path to make test SM
         StorageManager::new(storage_path)
         //  panic!("TODO milestone hs");
     }
@@ -607,27 +590,6 @@ impl StorageTrait for StorageManager {
             // write the serialized info into the file
             serialized_hm_file.write(serialized_hm.as_bytes());
         }
-        /*if !self.is_temp {
-            for (key, value) in &*containers_unlock {
-                // serialize the contents of HeapFile struct
-                //  let serialized_hf_file = serde_json::to_string(&value.hf_file_object)
-                //     .expect("failed to serialize hf_file");
-                let serialized_hf_file_path = serde_json::to_string(&value.hf_file_path)
-                    .expect("failed to serialize hf_file");
-                let serialized_hf_fsm = serde_json::to_string(&value.free_space_map)
-                    .expect("failed to serialize hf_file");
-                // create file to store serialized contents
-                let mut new_heapfile_path = PathBuf::new();
-                new_heapfile_path.push(&self.storage_path.clone());
-                new_heapfile_path.push("serialized_hm.json");
-                let mut serialized_hm_file = fs::File::create(new_heapfile_path).unwrap();
-
-                // write serialized fields into the file
-                //serialized_hm_file.write(serialized_hf_file.as_bytes());
-                serialized_hm_file.write(serialized_hf_file_path.as_bytes());
-                serialized_hm_file.write(serialized_hf_fsm.as_bytes());
-            }
-        }*/
         drop(containers2_unlock);
         // then just remove all stored files
         self.reset();

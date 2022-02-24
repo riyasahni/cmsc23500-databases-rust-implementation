@@ -1,20 +1,16 @@
 extern crate common;
 extern crate heapstore as sm;
-use std::ptr::eq;
-
 use common::ids::Permissions;
 use common::ids::{ContainerId, TransactionId};
 use common::storage_trait::StorageTrait;
 use common::testutil::*;
 use rand::{thread_rng, Rng};
 use sm::storage_manager::StorageManager;
-use std::collections::VecDeque;
 
 const RO: Permissions = Permissions::ReadOnly;
 
 #[test]
 fn sm_inserts() {
-    // TEST PASSES
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
     let num_vals: Vec<usize> = vec![10, 50, 75, 100, 500, 1000];
@@ -34,8 +30,6 @@ fn sm_inserts() {
 
 #[test]
 fn sm_insert_delete() {
-    // PROBLEM: FOR N>=75, I AM MISSING A RECORD, ONE THAT HAS THE SAME SLOT ID AS IDX_TO_DELETE
-    // PROBLEM: TEST PASSES FOR N <= 74...
     let mut rng = thread_rng();
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
@@ -45,36 +39,26 @@ fn sm_insert_delete() {
     let mut val_ids = sm.insert_values(cid, vals1.clone(), t);
     for _ in 0..10 {
         let idx_to_del = rng.gen_range(0..vals1.len());
-        println!("in sm_integration idx_to_del: {}", idx_to_del);
         sm.delete_value(val_ids[idx_to_del], t).unwrap();
         let check_vals: Vec<Vec<u8>> = sm.get_iterator(cid, t, RO).collect();
         assert!(!compare_unordered_byte_vecs(&vals1, check_vals.clone()));
         vals1.swap_remove(idx_to_del);
         val_ids.swap_remove(idx_to_del);
-        // println!("in sm_integration vals1: {:?}", vals1);
-        // println!("");
-        // println!("");
-        // println!("in sm_integration check_vals: {:?}", check_vals);
-        // println!("in sm_integration: get_value for idx_to_del {:?}", )
         assert!(compare_unordered_byte_vecs(&vals1, check_vals));
     }
 }
 
 #[test]
 fn sm_insert_updates() {
-    //PROBLEM: THE VALUE BEFORE THE RE-INSERTED VALUE IS JUST ZEROS FOR N <=74
-    //PROBLEM: FOR N >=75, LOOKS LIKE A SINGLE RANDOM VALUE (NOT THE UPDATED ONE)
-    //IS DIFFERENT IN MY CHECK_VALS --> MAYBE SOMETHING BEING OVERWRITTEN??
     let mut rng = thread_rng();
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
-    let mut vals1 = get_random_vec_of_byte_vec(5, 50, 100);
+    let mut vals1 = get_random_vec_of_byte_vec(100, 50, 100);
     let cid = 1;
     sm.create_table(cid).unwrap();
     let mut val_ids = sm.insert_values(cid, vals1.clone(), t);
     for _ in 0..10 {
         let idx_to_upd = rng.gen_range(0..vals1.len());
-        println!("sm_insert_updates: idx to upd: {}", idx_to_upd);
         let new_bytes = get_random_byte_vec(15);
         let new_val_id = sm
             .update_value(new_bytes.clone(), val_ids[idx_to_upd], t)
@@ -83,10 +67,6 @@ fn sm_insert_updates() {
         assert!(!compare_unordered_byte_vecs(&vals1, check_vals.clone()));
         vals1[idx_to_upd] = new_bytes;
         val_ids[idx_to_upd] = new_val_id;
-        println!("in sm_integration vals1: {:?}", vals1);
-        println!("");
-        println!("");
-        println!("in sm_integration check_vals: {:?}", check_vals);
         assert!(compare_unordered_byte_vecs(&vals1, check_vals));
     }
 }
@@ -94,7 +74,6 @@ fn sm_insert_updates() {
 #[test]
 #[should_panic]
 fn sm_no_container() {
-    // TEST PASSES
     let sm = StorageManager::new_test_sm();
     let t = TransactionId::new();
     let vals1 = get_random_vec_of_byte_vec(100, 50, 100);
@@ -103,7 +82,6 @@ fn sm_no_container() {
 
 #[test]
 fn sm_test_shutdown() {
-    // TEST PASSES WHEN I MANUALLY DELETE THE ..SRC/HEAPSTORE/TMP FOLDER AND RUN THE TEST
     let path = String::from("tmp");
     let sm = StorageManager::new(path.clone());
     let t = TransactionId::new();
@@ -113,6 +91,7 @@ fn sm_test_shutdown() {
     sm.create_table(cid).unwrap();
     let _val_ids = sm.insert_values(cid, vals1.clone(), t);
     sm.shutdown();
+
     let sm2 = StorageManager::new(path);
     let check_vals: Vec<Vec<u8>> = sm2.get_iterator(cid, t, RO).collect();
     assert!(compare_unordered_byte_vecs(&vals1, check_vals));

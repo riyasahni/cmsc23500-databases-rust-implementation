@@ -1,3 +1,4 @@
+use crate::heapfile;
 use common::ids::{PageId, SlotId};
 use common::PAGE_SIZE;
 use log::Log;
@@ -5,8 +6,6 @@ use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::mem;
 use std::sync::mpsc::Receiver;
-
-use crate::heapfile;
 
 pub(crate) struct Page {
     pub data: [u8; PAGE_SIZE],
@@ -212,7 +211,78 @@ impl Page {
 
     /// Delete the bytes/slot for the slotId.
     pub fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
-        println!("in PAGE delete_value: page_id {}", self.header.PageID);
+        // create bool to check if slot was deleted eventually or not
+        println!(
+            "in PAGE delete_value: printing page bytes before delete: {:?}",
+            self.get_bytes()
+        );
+        println!(
+            "in PAGE delete_value: printing value to delete: {:?}",
+            self.get_value(slot_id)
+        );
+        let mut was_deleted = false;
+        // check if slot_id exists in vector of records
+        if slot_id > (self.header.vec_of_records.len() - 1) as u16 {
+            println!("in PAGE delete_value: slot id does not exist in vector of records");
+            return None;
+        };
+        // check if record with slot_id is not already deleted
+        if self.header.vec_of_records[slot_id as usize].is_deleted == 1 {
+            println!("in PAGE delete_value: slot id was already deleted");
+            return None;
+        };
+
+        // if record is not already deleted, then delete it
+        let deleted_record = &mut self.header.vec_of_records[slot_id as usize];
+        let deleted_record_beg_loc = deleted_record.beg_location.clone();
+        let deleted_record_end_loc = deleted_record.end_location.clone();
+
+        deleted_record.is_deleted = 1;
+        // now fill in the gap caused by the deleted record by shifting all valid records
+        // with a higher beg_location forward
+        let deleted_record_length = deleted_record.end_location - deleted_record.beg_location;
+
+        let mut move_vec = Vec::new();
+        for z in self.header.ptr_to_end_of_free_space..deleted_record_beg_loc {
+            move_vec.push(self.data[z as usize])
+        }
+        let move_arr: &[u8] = &move_vec;
+        let indx_start =
+            deleted_record_length as usize + self.header.ptr_to_end_of_free_space as usize;
+        // stop index will be location + length (end of deleted slot)
+        let indx_stop = deleted_record_beg_loc as usize + deleted_record_length as usize;
+        self.data[indx_start..indx_stop].clone_from_slice(move_arr);
+        for z in self.header.ptr_to_end_of_free_space as usize..indx_start {
+            self.data[z] = 0;
+        }
+        was_deleted = true;
+
+        for i in 0..self.header.vec_of_records.len() {
+            let rec = &mut self.header.vec_of_records[i];
+            // check if record is valid and was above the deleted record (regardless of its slot id)
+            if rec.is_deleted.clone() == 0 && rec.beg_location.clone() < deleted_record_beg_loc {
+                // updated bool to indicate slot was eventually deleted
+                was_deleted = true;
+                // now shift the actual data for that record in the page down, too
+                // shift the beginning and end locations of the record stored in header down
+                rec.end_location += deleted_record_length;
+                rec.beg_location += deleted_record_length;
+            }
+        }
+
+        // then update the end of free space if slot was eventually deleted
+        if was_deleted {
+            self.header.ptr_to_end_of_free_space += deleted_record_length;
+        }
+
+        println!(
+            "in PAGE delete_value: printing page bytes after delete: {:?}",
+            self.get_bytes()
+        );
+        println!("PAGE DELETE, see if gone {:?}", self.get_value(slot_id));
+
+        Some(())
+        /* println!("in PAGE delete_value: page_id {}", self.header.PageID);
         // create bool to check if slot was deleted eventually or not
         println!(
             "in PAGE delete_value: printing page bytes before delete: {:?}",
@@ -248,8 +318,24 @@ impl Page {
         // now fill in the gap caused by the deleted record by shifting all valid records
         // with a higher beg_location forward
         let deleted_record_length = deleted_record.end_location - deleted_record.beg_location;
-
-        for i in 0..self.header.vec_of_records.len() {
+        // just shift all of the records that are above the deleted record down by deleted_record_length
+        // in one go!
+        let mut vec_to_shift = Vec::new();
+        // push all bytes of records above deleted record (in order) into vector
+        for b in self.header.ptr_to_end_of_free_space..deleted_record.beg_location {
+            vec_to_shift.push(self.data[b as usize]);
+        }
+        // convert the vector to an array
+        let array_to_shift: &[u8] = &vec_to_shift;
+        // new beginning index for shifted array = end of free space + len of deleted record
+        let new_arr_beg_loc = self.header.ptr_to_end_of_free_space + deleted_record_length;
+        // new end index for shifted array = deleted rec's beg loc + len of deleted record
+        let new_arr_end_loc = deleted_record.beg_location + deleted_record_length;
+        // now actually shift over bytes of records above deleted record to fill in gap
+        self.data[new_arr_beg_loc as usize..new_arr_end_loc as usize]
+            .clone_from_slice(array_to_shift);
+        //////////////////////////
+        /*for i in 0..self.header.vec_of_records.len() {
             let rec = &mut self.header.vec_of_records[i];
             // check if record is valid and was above the deleted record (regardless of its slot id)
             if rec.is_deleted.clone() == 0 && rec.beg_location.clone() < deleted_record_beg_loc {
@@ -263,7 +349,8 @@ impl Page {
                 rec.end_location += deleted_record_length;
                 rec.beg_location += deleted_record_length;
             }
-        }
+        }*/
+        /////////////////////////
         // then update the end of free space if slot was eventually deleted
         if was_deleted {
             self.header.ptr_to_end_of_free_space += deleted_record_length;
@@ -300,7 +387,7 @@ impl Page {
             "in PAGE delete_value: printing page bytes after delete: {:?}",
             self.get_bytes()
         );
-        Some(())
+        Some(())*/
     }
 
     /// Create a new page from the byte array.
