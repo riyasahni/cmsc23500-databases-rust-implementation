@@ -85,11 +85,6 @@ impl HeapFile {
             self.read_count.fetch_add(1, Ordering::Relaxed);
         }
         // if pid > the number of pages in the file, return error
-        println!("in heapfile.rs -- read_page_from_file pid: {}", pid);
-        println!(
-            "in heapfile.rs -- read_page_from_file num_pages: {}",
-            self.num_pages()
-        );
         if pid >= self.num_pages() {
             return Err(CrustyError::CrustyError(format!(
                 "Cannot open or create heap file",

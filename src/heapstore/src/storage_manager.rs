@@ -297,6 +297,9 @@ impl StorageTrait for StorageManager {
         vec_of_value_ids
         //     panic!("TODO milestone hs");
     }
+    ////////////////---- SOPHIE'S HELPER FUNCTION ----///////////////////////////////
+
+    ////////////////---- SOPHIE'S HELPER FUNCTION ----///////////////////////////////
 
     /// Delete the data for a value. If the valueID is not found it returns Ok() still.
     fn delete_value(&self, id: ValueId, tid: TransactionId) -> Result<(), CrustyError> {
@@ -331,17 +334,24 @@ impl StorageTrait for StorageManager {
                     "delete_value: extracted page -- {:?}",
                     Page::get_bytes(&extracted_page)
                 );*/
-                //let num_valid_records = Page::return_num_of_valid_records(&mut extracted_page);
+                let num_valid_records = Page::return_num_of_valid_records(&mut extracted_page);
+                println!("storage_manager: num_valid_records: {}", num_valid_records);
                 let num_records = extracted_page.header.vec_of_records.len() as u16;
+                println!("storage_manager: num_records: {}", num_records);
+                /*for i in 0..extracted_page.header.vec_of_records.len() {
+                    let rec = extracted_page.header.vec_of_records[i];
+                    if !rec.is_deleted {}
+                }*/
+                //let num_records = extracted_page.header.vec_of_records.len() as u16;
                 /*println!(
                     "in delete_value: # of valid records on page: {}",
                     num_valid_records
                 );*/
-                if num_records == 0 {
+                if num_valid_records == 0 {
                     println!("in deleted value: no records on page");
                     return Ok(());
                 }
-                if slot_id < num_records {
+                if slot_id < num_valid_records {
                     // extract record w given slot_id from page
                     let page_record = &extracted_page.header.vec_of_records[slot_id as usize];
                     // check if page_record is valid (not deleted)
@@ -807,7 +817,6 @@ mod test {
 
         let vals = get_random_vec_of_byte_vec(1000, 40, 400);
         sm.insert_values(cid, vals, tid);
-        println!("i got here");
         let mut count = 0;
         for _ in sm.get_iterator(cid, tid, Permissions::ReadOnly) {
             count += 1;
