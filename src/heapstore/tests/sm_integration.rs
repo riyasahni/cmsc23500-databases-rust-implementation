@@ -41,6 +41,10 @@ fn sm_insert_delete() {
         let idx_to_del = rng.gen_range(0..vals1.len());
         sm.delete_value(val_ids[idx_to_del], t).unwrap();
         let check_vals: Vec<Vec<u8>> = sm.get_iterator(cid, t, RO).collect();
+        println!("sm_insert_delete: vals1: {:?}", vals1);
+        println!("");
+        println!("");
+        println!("sm_insert_delete: check_vals: {:?}", check_vals);
         assert!(!compare_unordered_byte_vecs(&vals1, check_vals.clone()));
         vals1.swap_remove(idx_to_del);
         val_ids.swap_remove(idx_to_del);
@@ -67,6 +71,10 @@ fn sm_insert_updates() {
         assert!(!compare_unordered_byte_vecs(&vals1, check_vals.clone()));
         vals1[idx_to_upd] = new_bytes;
         val_ids[idx_to_upd] = new_val_id;
+        println!("sm_insert_updates: vals1: {:?}", vals1);
+        println!("");
+        println!("");
+        println!("sm_insert_delete: check_vals: {:?}", check_vals);
         assert!(compare_unordered_byte_vecs(&vals1, check_vals));
     }
 }

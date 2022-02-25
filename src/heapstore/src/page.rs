@@ -129,58 +129,6 @@ impl Page {
         }
         // if no space for new record, return None
         return None;
-        ////////////////// ----- MY OLD WORKING CODE ----- ///////////////////////////////////////////////
-        /*if self.get_largest_free_contiguous_space() >= bytes.len() + 5 {
-            // ONLY ADD 5 WHEN WE NEED TO ADD A NEW R
-            // RECORD TO THE VECTOR OF RECORDS
-            // record's beginning location is offset - record's length
-            let new_beg_location = self.header.ptr_to_end_of_free_space - bytes.len() as u16;
-            // record's end location is what the end of free space used to be
-            let new_end_location = self.header.ptr_to_end_of_free_space;
-            // reuse slot id of deleted record by inserting new record info in the
-            // deleted vector's index
-            for j in 0..self.header.vec_of_records.len() {
-                if self.header.vec_of_records[j].is_deleted == 1 {
-                    // if record has been deleted, the new record takes its slot id
-                    self.header.vec_of_records[j].beg_location = new_beg_location;
-                    self.header.vec_of_records[j].end_location = new_end_location;
-                    // update the is_deleted flag
-                    self.header.vec_of_records[j].is_deleted = 0;
-                    // save the new record's slot id
-                    let new_slotid = j;
-                    // copy new record data into the page at the new beginning location
-                    self.data[new_beg_location as usize..new_end_location as usize]
-                        .clone_from_slice(&bytes);
-                    // update the ptr_to_end_of_free_space
-                    self.header.ptr_to_end_of_free_space = new_beg_location;
-                    // return the new slot id for the new record!
-                    return Some(new_slotid as u16);
-                }
-            }
-            // otherwise, create a new record
-            let new_record = Record {
-                beg_location: new_beg_location,
-                end_location: new_end_location,
-                is_deleted: 0,
-            };
-            // push new record into vector of records
-            // the index of the new_record is its slot id
-            self.header.vec_of_records.push(new_record);
-            // update the ptr_to_end_of_free_space
-            self.header.ptr_to_end_of_free_space = new_beg_location;
-            // update the ptr_to_beg_of_free_space
-            self.header.ptr_to_beg_of_free_space += 5;
-            // copy new record data into the page at the new beginning location
-            self.data[new_beg_location as usize..new_end_location as usize]
-                .clone_from_slice(&bytes);
-            // save the new record's slot id
-            let new_slotid = self.header.vec_of_records.len() - 1;
-            // return the new slot id for the new record!
-            Some(new_slotid.try_into().unwrap())
-        } else {
-            None
-        }*/
-        ////////////////// ----- MY OLD WORKING CODE ----- ///////////////////////////////////////////////
     }
 
     /// Return the bytes for the slotId. If the slotId is not valid then return None
@@ -212,14 +160,6 @@ impl Page {
     /// Delete the bytes/slot for the slotId.
     pub fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
         // create bool to check if slot was deleted eventually or not
-        println!(
-            "in PAGE delete_value: printing page bytes before delete: {:?}",
-            self.get_bytes()
-        );
-        println!(
-            "in PAGE delete_value: printing value to delete: {:?}",
-            self.get_value(slot_id)
-        );
         let mut was_deleted = false;
         // check if slot_id exists in vector of records
         if slot_id > (self.header.vec_of_records.len() - 1) as u16 {
@@ -231,17 +171,17 @@ impl Page {
             println!("in PAGE delete_value: slot id was already deleted");
             return None;
         };
-
         // if record is not already deleted, then delete it
         let deleted_record = &mut self.header.vec_of_records[slot_id as usize];
         let deleted_record_beg_loc = deleted_record.beg_location.clone();
         let deleted_record_end_loc = deleted_record.end_location.clone();
-
+        // indicate selected record has been deleted
         deleted_record.is_deleted = 1;
         // now fill in the gap caused by the deleted record by shifting all valid records
         // with a higher beg_location forward
         let deleted_record_length = deleted_record.end_location - deleted_record.beg_location;
-
+        // create vector to fill with bytes of all records that I want to shift (to fill in deleted
+        // record's gap)
         let mut move_vec = Vec::new();
         for z in self.header.ptr_to_end_of_free_space..deleted_record_beg_loc {
             move_vec.push(self.data[z as usize])
@@ -255,8 +195,8 @@ impl Page {
         for z in self.header.ptr_to_end_of_free_space as usize..indx_start {
             self.data[z] = 0;
         }
+        // indicate record was actually deleted
         was_deleted = true;
-
         for i in 0..self.header.vec_of_records.len() {
             let rec = &mut self.header.vec_of_records[i];
             // check if record is valid and was above the deleted record (regardless of its slot id)
@@ -269,125 +209,11 @@ impl Page {
                 rec.beg_location += deleted_record_length;
             }
         }
-
         // then update the end of free space if slot was eventually deleted
         if was_deleted {
             self.header.ptr_to_end_of_free_space += deleted_record_length;
         }
-
-        println!(
-            "in PAGE delete_value: printing page bytes after delete: {:?}",
-            self.get_bytes()
-        );
-        println!("PAGE DELETE, see if gone {:?}", self.get_value(slot_id));
-
         Some(())
-        /* println!("in PAGE delete_value: page_id {}", self.header.PageID);
-        // create bool to check if slot was deleted eventually or not
-        println!(
-            "in PAGE delete_value: printing page bytes before delete: {:?}",
-            self.get_bytes()
-        );
-        println!("");
-        println!("--------------------------------------------------------");
-        println!("");
-        println!(
-            "in PAGE delete_value: printing value to delete: {:?}",
-            self.get_value(slot_id)
-        );
-        println!("");
-        println!("--------------------------------------------------------");
-        println!("");
-        let mut was_deleted = false;
-        // check if slot_id exists in vector of records
-        if slot_id > (self.header.vec_of_records.len() - 1) as u16 {
-            println!("in PAGE delete_value: slot id does not exist in vector of records");
-            return None;
-        };
-        // check if record with slot_id is not already deleted
-        if self.header.vec_of_records[slot_id as usize].is_deleted == 1 {
-            println!("in PAGE delete_value: slot id was already deleted");
-            return None;
-        };
-        // if record is not already deleted, then delete it
-        let deleted_record = &mut self.header.vec_of_records[slot_id as usize];
-        let deleted_record_beg_loc = deleted_record.beg_location.clone();
-        let deleted_record_end_loc = deleted_record.end_location.clone();
-        //self.header.vec_of_records[slot_id as usize].is_deleted = 1;
-        deleted_record.is_deleted = 1;
-        // now fill in the gap caused by the deleted record by shifting all valid records
-        // with a higher beg_location forward
-        let deleted_record_length = deleted_record.end_location - deleted_record.beg_location;
-        // just shift all of the records that are above the deleted record down by deleted_record_length
-        // in one go!
-        let mut vec_to_shift = Vec::new();
-        // push all bytes of records above deleted record (in order) into vector
-        for b in self.header.ptr_to_end_of_free_space..deleted_record.beg_location {
-            vec_to_shift.push(self.data[b as usize]);
-        }
-        // convert the vector to an array
-        let array_to_shift: &[u8] = &vec_to_shift;
-        // new beginning index for shifted array = end of free space + len of deleted record
-        let new_arr_beg_loc = self.header.ptr_to_end_of_free_space + deleted_record_length;
-        // new end index for shifted array = deleted rec's beg loc + len of deleted record
-        let new_arr_end_loc = deleted_record.beg_location + deleted_record_length;
-        // now actually shift over bytes of records above deleted record to fill in gap
-        self.data[new_arr_beg_loc as usize..new_arr_end_loc as usize]
-            .clone_from_slice(array_to_shift);
-        //////////////////////////
-        /*for i in 0..self.header.vec_of_records.len() {
-            let rec = &mut self.header.vec_of_records[i];
-            // check if record is valid and was above the deleted record (regardless of its slot id)
-            if rec.is_deleted.clone() == 0 && rec.beg_location.clone() < deleted_record_beg_loc {
-                // updated bool to indicate slot was eventually deleted
-                was_deleted = true;
-                // now shift the actual data for that record in the page down, too
-                for byte in rec.beg_location..rec.end_location {
-                    self.data[(byte + deleted_record_length) as usize] = self.data[byte as usize];
-                }
-                // shift the beginning and end locations of the record stored in header down
-                rec.end_location += deleted_record_length;
-                rec.beg_location += deleted_record_length;
-            }
-        }*/
-        /////////////////////////
-        // then update the end of free space if slot was eventually deleted
-        if was_deleted {
-            self.header.ptr_to_end_of_free_space += deleted_record_length;
-        }
-
-        ///////////////////////---- MY OLD CODE ----////////////////////////////////
-        /*for i in (slot_id + 1) as usize..self.header.vec_of_records.len() {
-            // get the records after the one I've just deleted
-            let rec = &mut self.header.vec_of_records[i];
-            /*println!(
-                "page: record_beg location after one I just deleted: {}",
-                rec.beg_location
-            );*/
-            // now shift the actual data for that record in the page down, too
-            for byte in rec.beg_location..rec.end_location {
-                /*println!(
-                    "page: new location for data: {}",
-                    self.data[(byte + deleted_record_length) as usize]
-                );*/
-                //println!("page: shifted data: {}", self.data[byte as usize]);
-                self.data[(byte + deleted_record_length) as usize] = self.data[byte as usize];
-            }
-            // shift the beginning and end locations of the record stored in header down
-            rec.end_location += deleted_record_length;
-            rec.beg_location += deleted_record_length;
-        }
-        // then update the end of free space
-        self.header.ptr_to_end_of_free_space += deleted_record_length;
-        //println!("page: get_bytes: {:?}", self.get_bytes());
-
-        Some(())*/
-        ///////////////////////---- MY OLD CODE ----////////////////////////////////
-        println!(
-            "in PAGE delete_value: printing page bytes after delete: {:?}",
-            self.get_bytes()
-        );
-        Some(())*/
     }
 
     /// Create a new page from the byte array.

@@ -75,7 +75,6 @@ impl StorageManager {
         let containers_unlock = self.containers.write().unwrap();
         // extract the heapfile corresponding with container_id
         if containers_unlock.get(&container_id).is_none() {
-            //  println!("SM write_page: hf is none"); //WHY??
             drop(containers_unlock);
             return Ok(());
         }
@@ -84,7 +83,6 @@ impl StorageManager {
         hf.write_page_to_file(page);
         drop(containers_unlock);
         Ok(())
-        //   panic!("TODO milestone hs");
     }
 
     /// Get the number of pages for a container
@@ -107,21 +105,16 @@ impl StorageManager {
     #[allow(dead_code)]
     pub(crate) fn get_hf_read_write_count(&self, container_id: ContainerId) -> (u16, u16) {
         let containers_unlock = self.containers.read().unwrap();
-
         if !containers_unlock.contains_key(&container_id) {
             drop(containers_unlock);
             return (0, 0);
         }
-
         let hf = containers_unlock.get(&container_id).unwrap();
-
         let write_count = hf.write_count.load(Ordering::Relaxed);
         let read_count = hf.read_count.load(Ordering::Relaxed);
-
         // return
         drop(containers_unlock);
         return (read_count, write_count);
-        //  panic!("TODO milestone hs");
     }
 }
 
@@ -136,31 +129,18 @@ impl StorageTrait for StorageManager {
         let storage_path_copy = storage_path.clone();
         let storage_path_copy_1 = storage_path_copy.clone();
         let storage_path_copy_new = storage_path_copy_1.clone();
-        //let mut storage_path_PathBuf = PathBuf::new();
-        //storage_path_PathBuf.push(storage_path.clone());
 
         if Path::new(&(storage_path + &"/serialized_hm".to_owned())).exists() {
             // get the file path for the serialized heapfile info
             let serialized_file = fs::File::open(storage_path_copy + &"/serialized_hm".to_owned())
                 .expect("error opening file");
-            // open up the serialized hf for this SM directory
-            // println!("I am in here now! so apparenly file also exists!");
-
             // deserialize the file back into a heapfile struct
             let mut containers2: HashMap<ContainerId, PathBuf> =
                 serde_json::from_reader(serialized_file).expect("cannot deserialize file");
-            /* for (key, val) in containers2.clone().iter() {
-                println!("SM NEW CONTAINERS2: {} -> {:?}", key, val);
-            }*/
             let mut containers: HashMap<ContainerId, Arc<HeapFile>> = HashMap::new();
-            //    let mut containers_unlock = containers.write();
-
             // now recreate the 'containers' hashmap with container_id:HashFile mapping
             for (c_id, hf_path) in containers2.iter() {
-                // println!("trying to insert constructed hf into containers hashmap");
-                // println!("hf_file path used to recreate hf: {:?}", hf_path);
                 let hf = HeapFile::new(hf_path.to_path_buf()).expect("failed to create hf");
-                // println!("SM NEW hf contents: {:?}", hf.free_space_map);
                 containers.insert(*c_id, Arc::new(hf));
             }
 
@@ -177,7 +157,6 @@ impl StorageTrait for StorageManager {
             // construct a new, empty SM
             let storage_path_copy_again = storage_path_copy_new.clone();
             fs::create_dir_all(storage_path_copy_again);
-            // println!("I'm in new() now! creating a new SM");
             let new_SM = StorageManager {
                 containers: Arc::new(RwLock::new(HashMap::new())),
                 containers2: Arc::new(RwLock::new(HashMap::new())),
@@ -185,18 +164,14 @@ impl StorageTrait for StorageManager {
                 is_temp: false,
             };
             // return it
-            // println!("just finished creating a new one :)");
             new_SM
-            //  panic!("TODO hs")
         }
     }
 
-    /// Create a new storage manager for testing. If this creates a temporary directory it should be cleaned up
-    /// when it leaves scope.
+    /// Create a new storage manager for testing.
     fn new_test_sm() -> Self {
         let storage_path = gen_random_dir().to_string_lossy().to_string();
         StorageManager::new(storage_path)
-        //  panic!("TODO milestone hs");
     }
 
     fn get_simple_config() -> common::ContainerConfig {
@@ -204,10 +179,6 @@ impl StorageTrait for StorageManager {
     }
 
     /// Insert some bytes into a container for a particular value (e.g. record).
-    /// Any validation will be assumed to happen before.
-    /// Returns the value id associated with the stored value.
-    /// Function will need to find the first page that can hold the value.
-    /// A new page may need to be created if no space on existing pages can be found.
     fn insert_value(
         // I discussed the logic for this function with Ellyn Liu...
         &self,
@@ -224,19 +195,12 @@ impl StorageTrait for StorageManager {
         let hf = containers_unlock.get(&container_id).unwrap();
         for i in 0..num_pages {
             // if an existing page has space for record, insert it
-            //    println!("SM inserts: before getting page");
             let mut page = HeapFile::read_page_from_file(hf, i).unwrap();
-            //Self::get_page(&self, container_id, i, tid, Permissions::ReadOnly, false).unwrap();
             let record_id = page.add_value(&value);
-            //     println!("SM inserts: after getting page");
-            //page.add_value(&value);
-            //    println!("SM inserts: after adding value to page");
             // check again that value was added to page
             if record_id.clone().is_none() {
-                // println!("SM inserts:nothing added to page...");
                 continue;
             }
-            //self.write_page(container_id, page, tid);
             hf.write_page_to_file(page);
             return ValueId {
                 container_id,
@@ -245,13 +209,12 @@ impl StorageTrait for StorageManager {
                 slot_id: record_id.clone(),
             };
         }
-
+        // create new page and extract slot id for record
         let mut new_page = Page::new(num_pages);
         let mut slot_id = new_page.add_value(&value);
-
-        //self.write_page(container_id, new_page, tid);
+        // write new page to file
         hf.write_page_to_file(new_page);
-        //drop(new_page);
+        // return value id
         return ValueId {
             container_id,
             segment_id: None,
@@ -260,9 +223,7 @@ impl StorageTrait for StorageManager {
         };
     }
 
-    /// Insert some bytes into a container for vector of values (e.g. record).
-    /// Any validation will be assumed to happen before.
-    /// Returns a vector of value ids associated with the stored values.
+    /// Insert some bytes into a container for vector of values
     fn insert_values(
         &self,
         container_id: ContainerId,
@@ -272,64 +233,36 @@ impl StorageTrait for StorageManager {
         // create vector of value ids that I will return
         let mut vec_of_value_ids = Vec::new();
         for val in values.iter() {
-            // println!("SM insert values: val:{:?}", val);
             let val_id = self.insert_value(container_id, val.to_vec(), tid);
-            // println!("SM insert values: val_id:{}", val_id.slot_id.unwrap());
             vec_of_value_ids.push(val_id);
         }
         vec_of_value_ids
-        //     panic!("TODO milestone hs");
     }
-    ////////////////---- SOPHIE'S HELPER FUNCTION ----///////////////////////////////
-
-    ////////////////---- SOPHIE'S HELPER FUNCTION ----///////////////////////////////
 
     /// Delete the data for a value. If the valueID is not found it returns Ok() still.
     fn delete_value(&self, id: ValueId, tid: TransactionId) -> Result<(), CrustyError> {
-        //println!("in delete_value");
         let container_id = id.container_id;
         let page_id = id.page_id.unwrap();
         let slot_id = id.slot_id.unwrap();
         // find the heapfile associated with container_id that's stored in ValueID
-        //println!("in delete_value: before unlocking containers");
         let num_pgs = self.get_num_pages(container_id);
         let mut containers_unlock = self.containers.write().unwrap();
-        // println!("in delete_value: after unlocking containers");
         println!("in deleted value: inside delete_value");
         if containers_unlock.contains_key(&container_id) {
             println!("in deleted value: heapfile exists for given container id");
             // extract heapfile's file path from hashmap
-            //   println!("in delete_value: before getting heapfile");
             let hf = containers_unlock.get(&container_id).unwrap();
-            //   println!("in delete_value: after getting heapfile");
             // check if page with given page id exists & extract
             if page_id <= num_pgs - 1 {
                 println!(
                     "in deleted value: page with given page id exists: {}",
                     page_id
                 );
-                //  println!("in delete_value: checked if page w given pid exists");
                 // extract page with given page_id
                 let mut extracted_page = HeapFile::read_page_from_file(&hf, page_id).unwrap();
-                //  println!("in delete_value: extracted page");
                 // check if slot_id exists in page
-                /*println!(
-                    "delete_value: extracted page -- {:?}",
-                    Page::get_bytes(&extracted_page)
-                );*/
                 let num_valid_records = Page::return_num_of_valid_records(&mut extracted_page);
-                println!("storage_manager: num_valid_records: {}", num_valid_records);
-                let num_records = extracted_page.header.vec_of_records.len() as u16;
-                println!("storage_manager: num_records: {}", num_records);
-                /*for i in 0..extracted_page.header.vec_of_records.len() {
-                    let rec = extracted_page.header.vec_of_records[i];
-                    if !rec.is_deleted {}
-                }*/
-                //let num_records = extracted_page.header.vec_of_records.len() as u16;
-                /*println!(
-                    "in delete_value: # of valid records on page: {}",
-                    num_valid_records
-                );*/
+
                 if num_valid_records == 0 {
                     println!("in deleted value: no records on page");
                     return Ok(());
@@ -342,38 +275,19 @@ impl StorageTrait for StorageManager {
                         println!("in deleted value: record to delete is valid");
                         // delete_value() on page for given slot_id if the corresponding record exists
                         Page::delete_value(&mut extracted_page, slot_id);
-                        //println!("in delete_value: deleted value from page");
                         // write page to file
-                        /*println!(
-                            "delete_value: extracted page -- {:?}",
-                            Page::get_bytes(&extracted_page)
-                        );*/
-                        /*println!(
-                            "delete value: get_value for non-deleted slot ids.. {:?}",
-                            Page::get_value(&extracted_page, slot_id + 2).unwrap()
-                        );*/
                         hf.write_page_to_file(extracted_page);
-                        //println!("in delete_value: wrote new page to file");
-                        //HeapFile::write_page_to_file(&hf, extracted_page);
                         drop(containers_unlock);
                         return Ok(());
                     }
-                    println!("in deleted value: slot wasnt valid");
                 }
-                println!(
-                    "in deleted value: (slot_id was not < num_records) value was never deleted..."
-                );
             }
-            //drop(containers_unlock);
         }
         drop(containers_unlock);
         Ok(())
-        //  panic!("TODO milestone hs");
     }
 
-    /// Updates a value. Returns valueID on update (which may have changed). Error on failure
-    /// Any process that needs to determine if a value changed will need to compare the return valueId against
-    /// the sent value.
+    /// Updates a value.
     fn update_value(
         &self,
         value: Vec<u8>,
@@ -388,19 +302,9 @@ impl StorageTrait for StorageManager {
         self.delete_value(id, _tid);
         // then re-insert record into heapfile
         Ok(self.insert_value(container_id, value, _tid))
-        //panic!("TODO milestone hs");
     }
 
     /// Create a new container to be stored.
-    /// fn create_container(&self, name: String) -> ContainerId;
-    /// Creates a new container object.
-    /// For this milestone you will not need to utilize
-    /// the container_config, name, container_type, or dependencies
-    ///
-    ///
-    /// # Arguments
-    ///
-    /// * `container_id` - Id of container to add delta to.
     fn create_container(
         &self,
         container_id: ContainerId,
@@ -436,7 +340,6 @@ impl StorageTrait for StorageManager {
         drop(containers);
         drop(containers2);
         Ok(())
-        // panic!("TODO milestone hs");
     }
 
     /// A wrapper function to call create container
@@ -453,7 +356,7 @@ impl StorageTrait for StorageManager {
     /// Remove the container and all stored values in the container.
     /// If the container is persisted remove the underlying files
     fn remove_container(&self, container_id: ContainerId) -> Result<(), CrustyError> {
-        /*// delete the heapfile w associated container id
+        // delete the heapfile w associated container id
         let mut containers_unlock = self.containers.write().unwrap();
         let hf = containers_unlock.get(&container_id);
         match hf {
@@ -467,8 +370,7 @@ impl StorageTrait for StorageManager {
                 ))
             }
         };
-        Ok(())*/
-        panic!("TODO milestone hs");
+        Ok(())
     }
 
     /// Get an iterator that returns all valid records
@@ -565,12 +467,7 @@ impl StorageTrait for StorageManager {
         panic!("TODO milestone hs (IGNORE)");
     }
 
-    /// Shutdown the storage manager. Can call drop. Should be safe to call multiple times.
-    /// If temp, this should remove all stored files.
-    /// If not a temp SM, this should serialize the mapping between containerID and Heapfile.
-    /// HINT: Heapfile won't be serializable/deserializable. You'll want to serialize information
-    /// that can be used to create a HeapFile object pointing to the same data. You don't need to
-    /// worry about recreating read_count or write_count.
+    /// Shutdown the storage manager. Can call drop.
     fn shutdown(&self) {
         // first check if the SM is temporary, and if it's not then serialize & store its contents
         //let mut containers_unlock = self.containers.write().unwrap();
