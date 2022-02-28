@@ -21,7 +21,13 @@ impl JoinPredicate {
     /// * `left_index` - Index of the field to compare in the left tuple.
     /// * `right_index` - Index of the field to compare in the right tuple.
     fn new(op: SimplePredicateOp, left_index: usize, right_index: usize) -> Self {
-        panic!("TODO milestone op");
+        let new_join_predicate = JoinPredicate {
+            op: op,
+            left_index: left_index,
+            right_index: right_index,
+        };
+        new_join_predicate
+        // panic!("TODO milestone op");
     }
 }
 
@@ -69,10 +75,12 @@ impl OpIterator for Join {
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
+        // just close the iterator
         panic!("TODO milestone op");
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
+        // reopen the iterator?
         panic!("TODO milestone op");
     }
 
