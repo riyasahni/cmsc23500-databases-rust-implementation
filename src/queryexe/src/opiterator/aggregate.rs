@@ -81,22 +81,6 @@ impl Aggregator {
                 let existing_sum = &mut agg_field_computations[1].clone();
                 let existing_min = &mut agg_field_computations[2].clone();
                 let existing_max = &mut agg_field_computations[3].clone();
-                println!(
-                    "merge_tuple_into_group: BEFORE UPDATE existing_count: {}",
-                    Field::unwrap_int_field(existing_count)
-                );
-                println!(
-                    "merge_tuple_into_group: BEFORE UPDATE existing_sum: {}",
-                    Field::unwrap_int_field(existing_sum)
-                );
-                println!(
-                    "merge_tuple_into_group: BEFORE UPDATE existing_min: {}",
-                    Field::unwrap_int_field(existing_min)
-                );
-                println!(
-                    "merge_tuple_into_group: BEFORE UPDATE existing_max: {}",
-                    Field::unwrap_int_field(existing_max)
-                );
 
                 let agg_field = &self.agg_fields[i];
                 let agg_field_index = agg_field.field;
@@ -108,20 +92,24 @@ impl Aggregator {
                 match tuple_agg_field {
                     // if field is int type, then the initial 'sum' calculation is just the field value
                     IntField => {
-                        println!(
-                            "tuple_agg_field: {}",
+                        /* println!(
+                            "IntField tuple_agg_field: {}",
                             Field::unwrap_int_field(&tuple_agg_field)
-                        );
-                        let sum_val = Field::unwrap_int_field(&tuple_agg_field)
-                            + Field::unwrap_int_field(&existing_sum);
+                        );*/
+                        let sum_val =
+                            tuple_agg_field.unwrap_int_field() + existing_sum.unwrap_int_field();
+                        //   + Field::unwrap_int_field(&existing_sum);
+                        println!("merge_tuple_into_group: after updating sum_val");
                         let min_val = min(
                             Field::unwrap_int_field(&tuple_agg_field),
                             Field::unwrap_int_field(&existing_min),
                         );
+                        println!("merge_tuple_into_group: after updating min_val");
                         let max_val = max(
                             Field::unwrap_int_field(&tuple_agg_field),
                             Field::unwrap_int_field(&existing_max),
                         );
+                        println!("merge_tuple_into_group: after updating max_val");
                         // update the count value for the agg field
                         let count_val = Field::unwrap_int_field(&existing_count) + 1;
                         println!(
@@ -159,6 +147,10 @@ impl Aggregator {
                     }
                     // if field is string type, then 'sum' calculation is "None"
                     StringField => {
+                        println!(
+                            "StringField tuple_agg_field: {}",
+                            Field::unwrap_string_field(&tuple_agg_field)
+                        );
                         let sum_val = Field::unwrap_string_field(&tuple_agg_field);
                         let min_val = min(
                             Field::unwrap_string_field(&tuple_agg_field),
@@ -192,13 +184,7 @@ impl Aggregator {
 
                 // extract the agg_field from tuple, given the index of the agg_field
                 let tuple_agg_field = Tuple::get_field(tuple, agg_field_index).unwrap();
-                /*if tuple_agg_field.is_none() {
-                    panic!("agg field does not exist in the given tuple!");
-                }*/
-                /*println!(
-                    "tuple_agg_field: {}",
-                    Field::unwrap_int_field(&tuple_agg_field.unwrap())
-                );*/
+
                 match tuple_agg_field {
                     IntField => {
                         let count_val = Field::IntField(1);
@@ -207,10 +193,7 @@ impl Aggregator {
                         let max_val = tuple_agg_field;
                         // push the newly created calculation fields into a vector
                         let mut agg_field_computations = Vec::new();
-                        //    println!("merge_tuple_into_group: FIRST count_val: {}", count_val);
-                        //    println!("merge_tuple_into_group: FIRST sum_val: {}", sum_val);
-                        //    println!("merge_tuple_into_group: FIRST min_val: {}", min_val);
-                        //    println!("merge_tuple_into_group: FIRST max_val: {}", max_val);
+
                         agg_field_computations.push(count_val);
                         agg_field_computations.push(sum_val.clone());
                         agg_field_computations.push(min_val.clone());
@@ -226,10 +209,7 @@ impl Aggregator {
                         let max_val = tuple_agg_field;
                         // push the newly created calculation fields into a vector
                         let mut agg_field_computations = Vec::new();
-                        //    println!("merge_tuple_into_group: FIRST count_val: {}", count_val);
-                        //    println!("merge_tuple_into_group: FIRST sum_val: {}", sum_val);
-                        //    println!("merge_tuple_into_group: FIRST min_val: {}", min_val);
-                        //    println!("merge_tuple_into_group: FIRST max_val: {}", max_val);
+
                         agg_field_computations.push(count_val);
                         agg_field_computations.push(sum_val.clone());
                         agg_field_computations.push(min_val.clone());
@@ -268,7 +248,7 @@ impl Aggregator {
                 println!("agg field type: {}", agg_field.field);
                 println!("agg op: {}", agg_field_operation);
                 // extract the vector of agg_field calculations from hashmap:
-                let vec_of_agg_field_calculations = self.hm_groupby_aggops.get(key).unwrap();
+                let vec_of_agg_field_calculations = val;
                 // extract the vec of calculations for the "ith" agg_field:
                 let calcs_for_ith_agg_field = vec_of_agg_field_calculations[i].clone();
                 println!("agg iterator: {:?}", calcs_for_ith_agg_field);
@@ -378,6 +358,13 @@ impl Aggregate {
         panic!("TODO milestone op");
     }
 }
+// child = how we form the query plan
+// imagine simple query plan: SELECT * from querya
+// child is the filter on top of a scan
+// the opiterator's child is the operator directly below it
+// filters and joins will have children coming into it
+// the children in a join are its sources of data
+// a join can have any combo of children
 
 impl OpIterator for Aggregate {
     fn open(&mut self) -> Result<(), CrustyError> {
@@ -387,20 +374,32 @@ impl OpIterator for Aggregate {
 
         // when you open iterator, get its tuple from its child iterator
         // call the next function of each child iterator
+
+        // ASK HIM IF THE BULK OF THE WORK IS IN MERGE_TUPLE AND ITERATOR
+        // AND ARE WE JUST CALLING THESE FUNCTIONS IN OPITERATOR?
+
+        //
         panic!("TODO milestone op");
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
         // fetch the result from the aggregator (should return tuple one by one)
+        // gets next tuple
         panic!("TODO milestone op");
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
+        // done using
         panic!("TODO milestone op");
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
-        //
+        //resets the state
+        // filter runs through an array of 70 tuples
+        // filter operator returns "next" for each eleent in the 70
+        // now we cant filter to start from beginnig and start iterating from the
+        // beginning tuple
+
         panic!("TODO milestone op");
     }
 
@@ -526,11 +525,12 @@ mod test {
 
         #[test]
         fn test_merge_multiple_ops() -> Result<(), CrustyError> {
+            println!("HERE IN test_merge_multiple_ops: 0");
             let schema = TableSchema::new(vec![
                 Attribute::new("agg1".to_string(), DataType::Int),
                 Attribute::new("agg2".to_string(), DataType::Int),
             ]);
-
+            println!("HERE IN test_merge_multiple_ops: 1");
             let mut agg = Aggregator::new(
                 vec![
                     AggregateField {
@@ -545,12 +545,14 @@ mod test {
                 Vec::new(),
                 &schema,
             );
+            println!("HERE IN test_merge_multiple_ops: 2");
 
             let ti = tuples();
             for t in &ti {
+                println!("HERE IN test_merge_multiple_ops -- on tuple: {:?}", t);
                 agg.merge_tuple_into_group(t);
             }
-
+            println!("HERE IN test_merge_multiple_ops: 3");
             let expected = vec![Field::IntField(6), Field::IntField(6)];
             let mut ai = agg.iterator();
             ai.open()?;
