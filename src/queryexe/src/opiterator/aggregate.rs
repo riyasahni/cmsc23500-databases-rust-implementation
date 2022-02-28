@@ -76,27 +76,27 @@ impl Aggregator {
             for mut i in 0..self.agg_fields.len() {
                 // extract existing computations vector for the agg_field with index i:
                 let agg_field_computations = &mut vec_of_fields[i];
-                println!(
-                    "merge_tuple_into_group: BEFORE UPDATE agg_field_computations[0]: {}",
-                    Field::unwrap_int_field(&agg_field_computations[0])
-                );
-                println!(
-                    "merge_tuple_into_group: BEFORE UPDATE agg_field_computations[1]: {}",
-                    Field::unwrap_int_field(&agg_field_computations[1])
-                );
-                println!(
-                    "merge_tuple_into_group: BEFORE UPDATE agg_field_computations[2]: {}",
-                    Field::unwrap_int_field(&agg_field_computations[2])
-                );
-                println!(
-                    "merge_tuple_into_group: BEFORE UPDATE agg_field_computations[3]: {}",
-                    Field::unwrap_int_field(&agg_field_computations[3])
-                );
 
                 let existing_count = &mut agg_field_computations[0].clone();
                 let existing_sum = &mut agg_field_computations[1].clone();
                 let existing_min = &mut agg_field_computations[2].clone();
                 let existing_max = &mut agg_field_computations[3].clone();
+                println!(
+                    "merge_tuple_into_group: BEFORE UPDATE existing_count: {}",
+                    Field::unwrap_int_field(existing_count)
+                );
+                println!(
+                    "merge_tuple_into_group: BEFORE UPDATE existing_sum: {}",
+                    Field::unwrap_int_field(existing_sum)
+                );
+                println!(
+                    "merge_tuple_into_group: BEFORE UPDATE existing_min: {}",
+                    Field::unwrap_int_field(existing_min)
+                );
+                println!(
+                    "merge_tuple_into_group: BEFORE UPDATE existing_max: {}",
+                    Field::unwrap_int_field(existing_max)
+                );
 
                 let agg_field = &self.agg_fields[i];
                 let agg_field_index = agg_field.field;
@@ -137,6 +137,7 @@ impl Aggregator {
                         agg_field_computations[1] = Field::IntField(sum_val);
                         agg_field_computations[2] = Field::IntField(min_val);
                         agg_field_computations[3] = Field::IntField(max_val);
+
                         println!(
                             "merge_tuple_into_group: AFTER UPDATE agg_field_computations[0]: {}",
                             Field::unwrap_int_field(&agg_field_computations[0])
@@ -153,6 +154,8 @@ impl Aggregator {
                             "merge_tuple_into_group: AFTER UPDATE agg_field_computations[3]: {}",
                             Field::unwrap_int_field(&agg_field_computations[3])
                         );
+                        self.hm_groupby_aggops.get_mut(&vec_primary_key).unwrap()[i] =
+                            agg_field_computations.to_vec();
                     }
                     // if field is string type, then 'sum' calculation is "None"
                     StringField => {
@@ -168,7 +171,7 @@ impl Aggregator {
                         // update the count value for the agg field
                         let count_val = Field::unwrap_int_field(&existing_count) + 1;
                         // update the contents of the agg_field_computations vector
-                        agg_field_computations[0] = Field::IntField(count_val);
+                        agg_field_computations[0] = Field::IntField(count_val + 1);
                         agg_field_computations[1] = Field::StringField(sum_val.to_string());
                         agg_field_computations[2] = Field::StringField(min_val.to_string());
                         agg_field_computations[3] = Field::StringField(max_val.to_string());
@@ -178,6 +181,7 @@ impl Aggregator {
             }
         } else {
             println!("merge_tuple_into_group: vec_primary_key did not exist in hashmap");
+
             // create new empty vector for new key-value pair to insert in hashmap
             let mut vec_of_fields = Vec::new();
             // iterate through the agg_fields and for each agg field get its corresponding
@@ -187,29 +191,55 @@ impl Aggregator {
                 let agg_field_index = agg_field.field;
 
                 // extract the agg_field from tuple, given the index of the agg_field
-                let tuple_agg_field = Tuple::get_field(tuple, agg_field_index);
-                if tuple_agg_field.is_none() {
+                let tuple_agg_field = Tuple::get_field(tuple, agg_field_index).unwrap();
+                /*if tuple_agg_field.is_none() {
                     panic!("agg field does not exist in the given tuple!");
+                }*/
+                /*println!(
+                    "tuple_agg_field: {}",
+                    Field::unwrap_int_field(&tuple_agg_field.unwrap())
+                );*/
+                match tuple_agg_field {
+                    IntField => {
+                        let count_val = Field::IntField(1);
+                        let sum_val = tuple_agg_field;
+                        let min_val = tuple_agg_field;
+                        let max_val = tuple_agg_field;
+                        // push the newly created calculation fields into a vector
+                        let mut agg_field_computations = Vec::new();
+                        //    println!("merge_tuple_into_group: FIRST count_val: {}", count_val);
+                        //    println!("merge_tuple_into_group: FIRST sum_val: {}", sum_val);
+                        //    println!("merge_tuple_into_group: FIRST min_val: {}", min_val);
+                        //    println!("merge_tuple_into_group: FIRST max_val: {}", max_val);
+                        agg_field_computations.push(count_val);
+                        agg_field_computations.push(sum_val.clone());
+                        agg_field_computations.push(min_val.clone());
+                        agg_field_computations.push(max_val.clone());
+
+                        // push the newly created vector into overal vector
+                        vec_of_fields.push(agg_field_computations);
+                    }
+                    StringField => {
+                        let count_val = Field::IntField(1);
+                        let sum_val = tuple_agg_field;
+                        let min_val = tuple_agg_field;
+                        let max_val = tuple_agg_field;
+                        // push the newly created calculation fields into a vector
+                        let mut agg_field_computations = Vec::new();
+                        //    println!("merge_tuple_into_group: FIRST count_val: {}", count_val);
+                        //    println!("merge_tuple_into_group: FIRST sum_val: {}", sum_val);
+                        //    println!("merge_tuple_into_group: FIRST min_val: {}", min_val);
+                        //    println!("merge_tuple_into_group: FIRST max_val: {}", max_val);
+                        agg_field_computations.push(count_val);
+                        agg_field_computations.push(sum_val.clone());
+                        agg_field_computations.push(min_val.clone());
+                        agg_field_computations.push(max_val.clone());
+
+                        // push the newly created vector into overal vector
+                        vec_of_fields.push(agg_field_computations);
+                    }
                 }
 
-                let count_val = Field::IntField(1);
-                let sum_val = tuple_agg_field.unwrap();
-                let min_val = tuple_agg_field.unwrap();
-                let max_val = tuple_agg_field.unwrap();
-
-                // push the newly created calculation fields into a vector
-                let mut agg_field_computations = Vec::new();
-                println!("merge_tuple_into_group: FIRST count_val: {}", count_val);
-                println!("merge_tuple_into_group: FIRST sum_val: {}", sum_val);
-                println!("merge_tuple_into_group: FIRST min_val: {}", min_val);
-                println!("merge_tuple_into_group: FIRST max_val: {}", max_val);
-                agg_field_computations.push(count_val);
-                agg_field_computations.push(sum_val.clone());
-                agg_field_computations.push(min_val.clone());
-                agg_field_computations.push(max_val.clone());
-
-                // push the newly created vector into overal vector
-                vec_of_fields.push(agg_field_computations);
                 i += 1;
             }
             // push new key-value pair into hashmap. Key is the group-by field
@@ -235,108 +265,62 @@ impl Aggregator {
                 let agg_field = agg_fields[i].clone();
                 let agg_field_index = agg_field.field;
                 let agg_field_operation = agg_field.op;
-
+                println!("agg field type: {}", agg_field.field);
+                println!("agg op: {}", agg_field_operation);
                 // extract the vector of agg_field calculations from hashmap:
                 let vec_of_agg_field_calculations = self.hm_groupby_aggops.get(key).unwrap();
                 // extract the vec of calculations for the "ith" agg_field:
-                let calcs_for_ith_agg_field =
-                    vec_of_agg_field_calculations[agg_field_index].clone();
-
+                let calcs_for_ith_agg_field = vec_of_agg_field_calculations[i].clone();
+                println!("agg iterator: {:?}", calcs_for_ith_agg_field);
                 // find out which agg_op I want to conduct on this agg field and extract the
                 // corresponding field from vec of agg_ops
-                match agg_field.field {
-                    IntField => {
-                        match agg_field_operation {
-                            Avg => {
-                                // avg = sum/count, so calculate sum and count, then divide.
-                                let agg_op_sum =
-                                    Field::unwrap_int_field(&calcs_for_ith_agg_field[1]);
-                                let agg_op_count =
-                                    Field::unwrap_int_field(&calcs_for_ith_agg_field[0]);
 
-                                let agg_op_value = agg_op_sum / agg_op_count;
+                match agg_field_operation {
+                    AggOp::Avg => {
+                        println!("avg match statement");
+                        // avg = sum/count, so calculate sum and count, then divide.
+                        let agg_op_sum = Field::unwrap_int_field(&calcs_for_ith_agg_field[1]);
 
-                                // create field that carries this information
-                                let agg_op_value_field = Field::IntField(agg_op_value);
-                                // turn agg_op_value into a Field and push into vector of fields of agg_op_values
-                                agg_op_values.push(agg_op_value_field);
-                            }
-                            Count => {
-                                // extract & unwrap the first field in vec to get "count" agg_op result
-                                let agg_op_value =
-                                    Field::unwrap_int_field(&calcs_for_ith_agg_field[0]);
+                        let agg_op_count = Field::unwrap_int_field(&calcs_for_ith_agg_field[0]);
 
-                                // create field that carries this information
-                                let agg_op_value_field = Field::IntField(agg_op_value);
-                                // turn agg_op_value into a Field and push into vector of fields of agg_op_values
-                                agg_op_values.push(agg_op_value_field);
-                            }
-                            Max => {
-                                // extract & unwrap the fourth field in vec to get "max" agg_op result
-                                let agg_op_value =
-                                    Field::unwrap_int_field(&calcs_for_ith_agg_field[3]);
+                        let agg_op_value = agg_op_sum / agg_op_count;
 
-                                // create field that carries this information
-                                let agg_op_value_field = Field::IntField(agg_op_value);
-                                // turn agg_op_value into a Field and push into vector of fields of agg_op_values
-                                agg_op_values.push(agg_op_value_field);
-                            }
-                            Min => {
-                                // extract & unwrap the third field in vec to get "min" agg_op result
-                                let agg_op_value =
-                                    Field::unwrap_int_field(&calcs_for_ith_agg_field[2]);
-
-                                // create field that carries this information
-                                let agg_op_value_field = Field::IntField(agg_op_value);
-                                // turn agg_op_value into a Field and push into vector of fields of agg_op_values
-                                agg_op_values.push(agg_op_value_field);
-                            }
-                            Sum => {
-                                // extract & unwrap the second field in vec to get "sum" agg_op result
-                                let agg_op_value =
-                                    Field::unwrap_int_field(&calcs_for_ith_agg_field[1]);
-
-                                // create field that carries this information
-                                let agg_op_value_field = Field::IntField(agg_op_value);
-                                // turn agg_op_value into a Field and push into vector of fields of agg_op_values
-                                agg_op_values.push(agg_op_value_field);
-                            }
-                            _ => panic!("invalid aggregate operation!"),
-                        }
+                        // create field that carries this information
+                        let agg_op_value_field = Field::IntField(agg_op_value);
+                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
+                        agg_op_values.push(agg_op_value_field);
                     }
-                    StringField => {
-                        match agg_field_operation {
-                            Count => {
-                                // extract & unwrap the first field in vec to get "count" agg_op result
-                                let agg_op_value =
-                                    Field::unwrap_int_field(&calcs_for_ith_agg_field[0]);
-                                // create field that carries this information
-                                let agg_op_value_field = Field::IntField(agg_op_value);
-                                // turn agg_op_value into a Field and push into vector of fields of agg_op_values
-                                agg_op_values.push(agg_op_value_field);
-                            }
-                            Max => {
-                                // extract & unwrap the fourth field in vec to get "max" agg_op result
-                                let agg_op_value =
-                                    Field::unwrap_string_field(&calcs_for_ith_agg_field[3]);
-                                // create field that carries this information
-                                let agg_op_value_field =
-                                    Field::StringField(agg_op_value.to_string());
-                                // turn agg_op_value into a Field and push into vector of fields of agg_op_values
-                                agg_op_values.push(agg_op_value_field);
-                            }
-                            Min => {
-                                // extract & unwrap the third field in vec to get "min" agg_op result
-                                let agg_op_value =
-                                    Field::unwrap_string_field(&calcs_for_ith_agg_field[2]);
-                                let agg_op_value_field =
-                                    Field::StringField(agg_op_value.to_string());
-                                // turn agg_op_value into a Field and push into vector of fields of agg_op_values
-                                agg_op_values.push(agg_op_value_field);
-                            }
-                            _ => panic!("invalid aggregate operation!"),
-                        }
+                    AggOp::Count => {
+                        println!("I'm getting inside the count match statement");
+                        // extract & unwrap the first field in vec to get "count" agg_op result
+                        let agg_op_value = &calcs_for_ith_agg_field[0];
+                        println!("agg iterator: agg_op_value {}", agg_op_value);
+                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
+                        agg_op_values.push(agg_op_value.clone());
                     }
+                    AggOp::Max => {
+                        println!("max match statement");
+                        // extract & unwrap the fourth field in vec to get "max" agg_op result
+                        let agg_op_value = &calcs_for_ith_agg_field[3];
+                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
+                        agg_op_values.push(agg_op_value.clone());
+                    }
+                    AggOp::Min => {
+                        println!("min match statement");
+                        // extract & unwrap the third field in vec to get "min" agg_op result
+                        let agg_op_value = &calcs_for_ith_agg_field[2];
+                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
+                        agg_op_values.push(agg_op_value.clone());
+                    }
+                    AggOp::Sum => {
+                        println!("sum match statement");
+                        // extract & unwrap the second field in vec to get "sum" agg_op result
+                        let agg_op_value = &calcs_for_ith_agg_field[1];
+
+                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
+                        agg_op_values.push(agg_op_value.clone());
+                    }
+                    _ => panic!("invalid aggregate operation!"),
                 }
                 i += 1;
             }
@@ -347,6 +331,7 @@ impl Aggregator {
             let merged_tuple = Tuple::merge(&primary_key_tuple, &agg_op_values_tuple);
             // push tuple into final vector
             vec_to_iterate.push(merged_tuple);
+            println!("agg iterator: vec_to_iterate: {:?}", vec_to_iterate);
         }
         // create the tuple-iterator and call it on the schema
         let new_tupleiterator = TupleIterator::new(vec_to_iterate, self.schema.clone());
