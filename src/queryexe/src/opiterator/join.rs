@@ -27,7 +27,6 @@ impl JoinPredicate {
             right_index: right_index,
         };
         new_join_predicate
-        // panic!("TODO milestone op");
     }
 }
 
@@ -60,6 +59,14 @@ impl Join {
         left_child: Box<dyn OpIterator>,
         right_child: Box<dyn OpIterator>,
     ) -> Self {
+        // create the join predicate
+        let join_predicate = JoinPredicate {
+            op,
+            left_index,
+            right_index,
+        };
+        // create the schema
+
         panic!("TODO milestone op");
     }
 }

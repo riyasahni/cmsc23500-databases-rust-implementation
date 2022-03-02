@@ -54,7 +54,7 @@ impl Aggregator {
     /// Otherwise, create a new group aggregate result.
     ///
     /// # Arguments
-    ///
+
     /// * `tuple` - Tuple to add to a group.
 
     pub fn merge_tuple_into_group(&mut self, tuple: &Tuple) {
@@ -185,8 +185,8 @@ impl Aggregator {
         // create an empty vector for vector of tuples that I will eventually iterate over
         let mut vec_to_iterate = Vec::new();
         for (key, val) in self.hm_groupby_aggops.iter() {
-            // create an empty vector that will be filled with agg_op_values (as fields) and later converted
-            // into a tuple
+            // create an empty vector that will be filled with agg_op_values
+            // (as fields) and later converted into a tuple
             let mut agg_op_values = Vec::new();
             for mut i in 0..agg_fields.len() {
                 // extract the agg_field's index and aggregate operation to be applied on it
@@ -290,7 +290,74 @@ impl Aggregate {
         ops: Vec<AggOp>,
         child: Box<dyn OpIterator>,
     ) -> Self {
-        panic!("TODO milestone op");
+        /*Creating a schema uses the TableSchema::new function which takes a Vec<Attribute> as input.
+        To find these attributes, you can use TableSchema::get_attribute, which takes the child and an index.
+        You're given two vectors of indices as inputs in the Aggregate::new function, which should be useful,
+        and you can rename the attribute by accessing its "name" field and using the two vectors of strings
+        you're also given.
+        Using this and the fact that the schema is of the form "group 1, group 2, ..." and
+        "aggregate type 1, type 2, ..." (ex: group 1, group 2, avg, count), you should be able to explicitly
+        construct the schema. */
+
+        // create new vec of AggregateFields
+        let mut vec_AggFields = Vec::new();
+        for i in 0..agg_indices.len() {
+            let aggfield_index = agg_indices[i];
+            let aggfield_op = ops[i];
+
+            let new_AggField = AggregateField {
+                field: aggfield_index,
+                op: aggfield_op,
+            };
+
+            vec_AggFields.push(new_AggField);
+        }
+        // create a Vec<Attribute> that I can later use to create the schema
+
+        let child_schema: TableSchema = child.get_schema().clone();
+        let mut groupby_field_and_agg_field_attributes = Vec::new();
+
+        // first push in the groupby_field attributes
+        for i in 0..groupby_indices.len() {
+            let groupby_index = groupby_indices[i];
+            let groupby_name = groupby_names[i];
+
+            let mut groupby_attribute = child_schema.get_attribute(groupby_index).unwrap().clone();
+            groupby_attribute.name = groupby_name.to_string();
+
+            groupby_field_and_agg_field_attributes.push(groupby_attribute);
+        }
+
+        // then push in the agg_field attributes
+        for i in 0..agg_indices.len() {
+            if agg_names[i] == "count" {
+                let mut attr = Attribute::new("count".to_string(), DataType::Int);
+                groupby_field_and_agg_field_attributes.push(attr);
+            } else {
+                let mut aggfield_attribute =
+                    child_schema.get_attribute(agg_indices[i]).unwrap().clone();
+                aggfield_attribute.name = agg_names[i].to_string();
+
+                groupby_field_and_agg_field_attributes.push(aggfield_attribute);
+            }
+        }
+        // now use the Vec<Attribute> to create the schema
+        let new_schema = TableSchema::new(groupby_field_and_agg_field_attributes);
+
+        // create aggregator
+        let new_aggregator =
+            Aggregator::new(vec_AggFields.clone(), groupby_indices.clone(), &new_schema);
+        let new_tuple_iterator = new_aggregator.iterator();
+        // create aggregate
+        let new_aggregate = Aggregate {
+            groupby_fields: groupby_indices,
+            agg_fields: vec_AggFields,
+            agg_iter: Some(new_tuple_iterator),
+            schema: new_schema,
+            open: false,
+            child,
+        };
+        new_aggregate
     }
 }
 // child = how we form the query plan
@@ -310,22 +377,41 @@ impl OpIterator for Aggregate {
         // when you open iterator, get its tuple from its child iterator
         // call the next function of each child iterator
 
-        // ASK HIM IF THE BULK OF THE WORK IS IN MERGE_TUPLE AND ITERATOR
-        // AND ARE WE JUST CALLING THESE FUNCTIONS IN OPITERATOR?
-
-        //
-        panic!("TODO milestone op");
+        self.open = true;
+        self.child.open();
+        Ok(())
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
         // fetch the result from the aggregator (should return tuple one by one)
+
         // gets next tuple
+        
+
+        if !self.open {
+            panic!("Operator has not been opened")
+        }
+
+        let mut res = None;
+        while let Some(t) = self.child.next()? {
+            if self.predicate.filter(&t) {
+                res = Some(t);
+                break;
+            }
+        }
+        Ok(res)
+
         panic!("TODO milestone op");
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
-        // done using
-        panic!("TODO milestone op");
+        if self.open == false {
+            panic!("Aggregate is already closed!");
+        } else {
+            self.open = false;
+        }
+
+        Ok(())
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
@@ -817,7 +903,13 @@ mod test {
             let expected_names = groupby_names;
             let schema = ai.get_schema();
             for (i, attr) in schema.attributes().enumerate() {
+                println!("test_get_schema: attribute name -- {:?}", attr.name());
+                println!(
+                    "test_get_schema: expected attribute name -- {:?}",
+                    expected_names[i]
+                );
                 assert_eq!(expected_names[i], attr.name());
+                println!("test_get_schema: attribute dtype -- {:?}", *attr.dtype());
                 assert_eq!(DataType::Int, *attr.dtype());
             }
         }
