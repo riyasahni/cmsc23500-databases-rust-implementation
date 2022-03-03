@@ -40,6 +40,8 @@ pub struct Join {
     right_child: Box<dyn OpIterator>,
     /// Schema of the result.
     schema: TableSchema,
+    /// Bool to indicate open or closed Join
+    is_open: bool,
 }
 
 impl Join {
@@ -75,6 +77,7 @@ impl Join {
             left_child,
             right_child,
             schema: new_schema,
+            is_open: false,
         };
         // return new join struct
         new_join
@@ -87,20 +90,30 @@ impl OpIterator for Join {
         self.right_child.open();
         self.left_child.open();
         // open join itself
-        self.open()
+        self.is_open = true;
+        Ok(())
+        // self.open()
     }
 
     /// Calculates the next tuple for a nested loop join.
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
+        /*for t_r in self.right_child.next().iter() {
+            for t_l in self.left_child.next().iter() {}
+        }*/
         panic!("TODO milestone op");
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
+        // check if already closed
+        if !self.is_open {
+            panic!("Already closed!");
+        }
         // close children
         self.right_child.close()?;
         self.left_child.close()?;
+        self.is_open = false;
         // close join
-        self.close()?;
+        // self.close();
         Ok(())
     }
 

@@ -293,15 +293,6 @@ impl Aggregate {
         ops: Vec<AggOp>,
         child: Box<dyn OpIterator>,
     ) -> Self {
-        /*Creating a schema uses the TableSchema::new function which takes a Vec<Attribute> as input.
-        To find these attributes, you can use TableSchema::get_attribute, which takes the child and an index.
-        You're given two vectors of indices as inputs in the Aggregate::new function, which should be useful,
-        and you can rename the attribute by accessing its "name" field and using the two vectors of strings
-        you're also given.
-        Using this and the fact that the schema is of the form "group 1, group 2, ..." and
-        "aggregate type 1, type 2, ..." (ex: group 1, group 2, avg, count), you should be able to explicitly
-        construct the schema. */
-
         // create new vec of AggregateFields
         let mut vec_AggFields = Vec::new();
         for i in 0..agg_indices.len() {
@@ -368,13 +359,6 @@ impl Aggregate {
         new_aggregate
     }
 }
-// child = how we form the query plan
-// imagine simple query plan: SELECT * from querya
-// child is the filter on top of a scan
-// the opiterator's child is the operator directly below it
-// filters and joins will have children coming into it
-// the children in a join are its sources of data
-// a join can have any combo of children
 
 impl OpIterator for Aggregate {
     fn open(&mut self) -> Result<(), CrustyError> {
@@ -383,7 +367,6 @@ impl OpIterator for Aggregate {
 
         // call merge_tuple_into_group on every tuple produced by child.next()
         while let Some(t) = self.child.next()? {
-            println!("Aggregate OPEN() -- tuple: {:?}", t);
             self.aggregator.merge_tuple_into_group(&t);
         }
 
