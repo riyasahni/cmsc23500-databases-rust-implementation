@@ -250,6 +250,7 @@ impl Aggregator {
             vec_to_iterate.push(merged_tuple);
         }
         // create the tuple-iterator and call it on the schema
+        println!("Iterator: vec_to_iterate: {:?}", vec_to_iterate);
         let new_tupleiterator = TupleIterator::new(vec_to_iterate, self.schema.clone());
         return new_tupleiterator;
     }
@@ -257,6 +258,8 @@ impl Aggregator {
 
 /// Aggregate operator. (You can add any other fields that you think are neccessary)
 pub struct Aggregate {
+    /// Aggregator that Aggregate uses
+    aggregator: Aggregator,
     /// Fields to groupby over.
     groupby_fields: Vec<usize>,
     /// Aggregation fields and corresponding aggregation functions.
@@ -309,9 +312,10 @@ impl Aggregate {
                 field: aggfield_index,
                 op: aggfield_op,
             };
-
+            println!("Aggregate new() -- new_AggField index: {}", new_AggField.op);
             vec_AggFields.push(new_AggField);
         }
+
         // create a Vec<Attribute> that I can later use to create the schema
 
         let child_schema: TableSchema = child.get_schema().clone();
@@ -345,11 +349,15 @@ impl Aggregate {
         let new_schema = TableSchema::new(groupby_field_and_agg_field_attributes);
 
         // create aggregator
-        let new_aggregator =
-            Aggregator::new(vec_AggFields.clone(), groupby_indices.clone(), &new_schema);
+        let new_aggregator = Aggregator::new(
+            vec_AggFields.clone(),
+            groupby_indices.clone(),
+            &child_schema,
+        );
         let new_tuple_iterator = new_aggregator.iterator();
         // create aggregate
         let new_aggregate = Aggregate {
+            aggregator: new_aggregator,
             groupby_fields: groupby_indices,
             agg_fields: vec_AggFields,
             agg_iter: Some(new_tuple_iterator),
@@ -370,38 +378,40 @@ impl Aggregate {
 
 impl OpIterator for Aggregate {
     fn open(&mut self) -> Result<(), CrustyError> {
-        // for aggregate, we use the aggregate operator
-        // in open, we want to create a net aggregator that
-        // is able to do all the operator work
+        self.child.open().expect("agg_new");
+        self.agg_iter.as_mut().unwrap().open();
 
-        // when you open iterator, get its tuple from its child iterator
-        // call the next function of each child iterator
+        // call merge_tuple_into_group on every tuple produced by child.next()
+        while let Some(t) = self.child.next()? {
+            println!("Aggregate OPEN() -- tuple: {:?}", t);
+            self.aggregator.merge_tuple_into_group(&t);
+        }
+
+        let new_tuple_iterator = self.aggregator.iterator();
+        self.agg_iter = Some(new_tuple_iterator);
+        self.agg_iter.as_mut().unwrap().open();
 
         self.open = true;
-        self.child.open();
+
         Ok(())
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
-        // fetch the result from the aggregator (should return tuple one by one)
-
         // gets next tuple
-        
-
         if !self.open {
-            panic!("Operator has not been opened")
-        }
-
-        let mut res = None;
-        while let Some(t) = self.child.next()? {
-            if self.predicate.filter(&t) {
-                res = Some(t);
-                break;
+            return Err(CrustyError::IOError("Aggregate not".to_string()));
+        } else {
+            match self.agg_iter.as_mut() {
+                Some(ti) => {
+                    return ti.next();
+                }
+                None => {
+                    return Err(CrustyError::IOError(
+                        "Could not generate TupleIterator".to_string(),
+                    ));
+                }
             }
         }
-        Ok(res)
-
-        panic!("TODO milestone op");
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
@@ -420,8 +430,13 @@ impl OpIterator for Aggregate {
         // filter operator returns "next" for each eleent in the 70
         // now we cant filter to start from beginnig and start iterating from the
         // beginning tuple
-
-        panic!("TODO milestone op");
+        if !self.open {
+            panic!("Operator has not been opened")
+        }
+        self.child.rewind()?;
+        self.child.close()?;
+        self.open()
+        //  panic!("TODO milestone op");
     }
 
     fn get_schema(&self) -> &TableSchema {

@@ -65,15 +65,29 @@ impl Join {
             left_index,
             right_index,
         };
-        // create the schema
-
-        panic!("TODO milestone op");
+        // create schema
+        let right_schema = right_child.get_schema();
+        let left_schema = left_child.get_schema();
+        let new_schema = TableSchema::merge(&right_schema, &left_schema);
+        // create new join struct
+        let new_join = Join {
+            predicate: join_predicate,
+            left_child,
+            right_child,
+            schema: new_schema,
+        };
+        // return new join struct
+        new_join
     }
 }
 
 impl OpIterator for Join {
     fn open(&mut self) -> Result<(), CrustyError> {
-        panic!("TODO milestone op");
+        // open children
+        self.right_child.open();
+        self.left_child.open();
+        // open join itself
+        self.open()
     }
 
     /// Calculates the next tuple for a nested loop join.
@@ -82,8 +96,12 @@ impl OpIterator for Join {
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
-        // just close the iterator
-        panic!("TODO milestone op");
+        // close children
+        self.right_child.close()?;
+        self.left_child.close()?;
+        // close join
+        self.close()?;
+        Ok(())
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
