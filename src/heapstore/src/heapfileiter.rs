@@ -51,7 +51,7 @@ impl Iterator for HeapFileIterator {
     type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
         ////////////////// --- alternative method --- ////////////////
-        /*let num_pages = self.heapfile.num_pages();
+        let num_pages = self.heapfile.num_pages();
         if self.page_index >= num_pages {
             None
         } else {
@@ -77,9 +77,9 @@ impl Iterator for HeapFileIterator {
                 self.page_index += 1;
                 return self.next();
             }
-        }*/
+        }
         ////////////////// --- alternative method --- ////////////////
-        // open heapfile
+        /*// open heapfile
         let hf = &self.heapfile;
         let num_pages = hf.num_pages();
         println!("in heapfileiter: num pages {}", num_pages);
@@ -114,6 +114,6 @@ impl Iterator for HeapFileIterator {
             self.p_iter.index = 0;
             return self.next();
         }
-        return next_val;
+        return next_val;*/
     }
 }

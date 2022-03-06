@@ -457,6 +457,7 @@ impl StorageTrait for StorageManager {
         // just reset the SM hashmap. Everything else stays the same.
         containers_unlock.clear();
         containers2_unlock.clear();
+
         drop(&self);
         Ok(())
         //  panic!("TODO milestone hs");

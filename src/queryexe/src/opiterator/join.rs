@@ -300,7 +300,7 @@ impl OpIterator for HashEqJoin {
             };
             self.saved_right = Some(right_val_new.clone());
         }
-        /// search hashmap for matches, use hashmap index to deal with multiple values / key  
+        /// search hashmap for matches, use hashmap index to deal with multiple values / key
         let right_field = right_val_new.get_field(self.right_index);
         match right_field {
             Some(rf) => {
