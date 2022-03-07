@@ -1,1 +1,2 @@
-For my QO Milestone, for the aggregate function, I decided to 
+For my QO Milestone, for the Hashjoin function, I created a Hashmap with a nested hashmap, 
+that maps the field to a hashmap of the 
