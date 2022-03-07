@@ -1,10 +1,24 @@
-I am obviously planning to use my submission for this Milestone.
+For my HS Milestone, I created a Heapfileiterator and a storage manager, that was in charge
+of calling functions that I have written in the Page Milestone, but on a higher level. For big
+design decisions, I decided to have two hashmaps in my SM struct, where one hashmap maps the 
+container id to the file path, and the other maps the container id to the HeapFile struct. I did 
+this so that I could use one of the hashmaps to serialize the HeapFile contents upon shutdown, while
+I used the other one to access the HeapFile struct's contents directly in other functions, because it
+made for cleaner code. In the shutdown() function, I used the containers2 hashmap to serialize the 
+HeapFile contents, and in new(), I use existing built-in functions to deserialize the serialized File and
+reconstruct the containers2 hashmap. Then, I use the containers2 hashmap to reconstruct the containers hashmap,
+which is used for all the other functions.
 
-This project was extremely difficult. I don't think I had sufficient documentation
-to understand what was going on early enough. I started this project the day I got it,
-and I've already spent upwards of 60 hours trying to complete it. I've attended every OH 
-that I could make, and almost always never get my questions answered, because they involve
-debugging. It takes an extremely long time to debug via Ed.
-
-I'm not enjoying this all. Very unfair to students who have never had experience with a systems
-class before.
+This project was extremely difficult and I spent upwards of 75 hours completing it. I did not have
+sufficient documentation going into this project to understand what was going on early enough. I started this project 
+the day it was assigned, and it took me about half a week to understand how the SM works and which built-in file functions exist.
+I attended every OH that I could make, and almost always never had my questions answered, because they involved debugging.
+It takes an extremely long time to debug via Ed. I wanted to give a big thanks to Tapan and Reilly for taking time out
+of their day to help me debug, outside of office hours. Clearly, this Milestone and the class is poorly designed when
+there are so many kids in OH that TAs have to take extra time outside of OH to help answer remaining questions. This 
+class is unfair on so many levels. Another thing to consider, is why students who answer a lot of Ed questions are 
+rewarded with extra points. There are students with varying programming abilities in the class, and students who have more
+experience with programming/systems classes already have an advantage with Milestones and other assignments. Now these
+same students are rewarded extra because they can also answer questions on Ed. Meanwhile, students who are less experienced
+with programming are further disadvantaged, because they are the ones *asking* the questions on Ed, and they're not rewarded
+for trying to catch up with more experienced students...

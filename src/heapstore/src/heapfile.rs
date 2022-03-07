@@ -1,33 +1,15 @@
-use crate::page::{Header, Page};
+use crate::page::Header;
+use crate::page::Page;
 use common::ids::PageId;
 use common::{CrustyError, PAGE_SIZE};
-use core::num;
 use std::fs::{metadata, File, OpenOptions};
 use std::io::prelude::*;
-use std::io::BufWriter;
 use std::io::{Seek, SeekFrom};
-// use std::os::unix::prelude::FileExt;
-use std::borrow::Borrow;
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::mem::drop;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 /// The struct for a heap file.  
-///
-/// HINT: You likely will want to design for interior mutability for concurrent accesses.
-/// eg Arc<RwLock<>> on some internal members
-///
-/// HINT: You will probably not be able to serialize HeapFile, as it needs to maintain a link to a
-/// File object, which cannot be serialized/deserialized/skipped by serde. You don't need to worry
-/// about persisting read_count/write_count during serialization.
-///
-/// Your code should persist what information is needed to recreate the heapfile.
-///
-///*****************************************************************************
-// idea: keep track of the fraction of free space remaining in a page w a
-// "free space" vector.
-//*********************************************************************************
 pub(crate) struct HeapFile {
     pub hf_file_path: PathBuf,
     pub hf_file_object: Arc<RwLock<File>>,
@@ -72,8 +54,7 @@ impl HeapFile {
         let hf_file_metadata = metadata(self.hf_file_path.clone()).unwrap();
         let num_bytes_in_hf = hf_file_metadata.len();
         // we know the size of each page
-        let num_pages = (num_bytes_in_hf / 4096) as u16;
-        num_pages
+        (num_bytes_in_hf / 4096) as u16
     }
 
     /// Read the page from the file.
@@ -86,14 +67,14 @@ impl HeapFile {
         }
         // if pid > the number of pages in the file, return error
         if pid >= self.num_pages() {
-            return Err(CrustyError::CrustyError(format!(
-                "Cannot open or create heap file",
-            )));
+            return Err(CrustyError::CrustyError(
+                "Cannot open or create heap file".to_string(),
+            ));
         }
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = pid as u64 * PAGE_SIZE as u64;
         // open file
-        let mut f = &mut self.hf_file_object.write().unwrap();
+        let f = &mut self.hf_file_object.write().unwrap();
         // move cursor to the page_offset position in the file
         f.seek(SeekFrom::Start(page_offset as u64));
         // create buffer (to read 4096 bytes)
@@ -104,7 +85,7 @@ impl HeapFile {
         // use "from_bytes" function to convert bytes into full page
         let final_page = Page::from_bytes(&full_read_page);
         // return page
-        drop(f);
+        // drop(f);
         Ok(final_page)
     }
 
@@ -131,7 +112,7 @@ impl HeapFile {
         {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
-        let mut file = &mut self.hf_file_object.write().unwrap();
+        let file = &mut self.hf_file_object.write().unwrap();
         // calculate where the beginning of the page is in the heapfile, given pid
         let page_offset = page.get_page_id() as u64 * PAGE_SIZE as u64;
         //println!("in heapfile: page_offset: {}", page_offset);
@@ -141,7 +122,7 @@ impl HeapFile {
         let page_bytes: &[u8] = &Page::get_bytes(&page);
         // write/clone bytes into the heapfile
         file.write(page_bytes);
-        drop(file);
+        //drop(file);
         Ok(())
     }
 }

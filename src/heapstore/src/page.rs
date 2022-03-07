@@ -35,17 +35,15 @@ impl Page {
             PageID: page_id,
             vec_of_records: Vec::new(),
         };
-        let newPage = Page {
+        Page {
             data: [0; PAGE_SIZE],
             header: newHeader,
-        };
-        newPage
+        }
     }
 
     /// Return the page id for a page
     pub fn get_page_id(&self) -> PageId {
-        let pageId = self.header.PageID;
-        pageId
+        self.header.PageID
     }
 
     /// Attempts to add a new value to this page if there is space available.
@@ -87,7 +85,7 @@ impl Page {
                     let new_slotid = j;
                     // copy new record data into the page at the new beginning location
                     self.data[new_beg_location as usize..new_end_location as usize]
-                        .clone_from_slice(&bytes);
+                        .clone_from_slice(bytes);
                     // update the ptr_to_end_of_free_space
                     self.header.ptr_to_end_of_free_space = new_beg_location;
                     println!(
@@ -120,15 +118,14 @@ impl Page {
             // update the ptr_to_beg_of_free_space
             self.header.ptr_to_beg_of_free_space += 5;
             // copy new record data into the page at the new beginning location
-            self.data[new_beg_location as usize..new_end_location as usize]
-                .clone_from_slice(&bytes);
+            self.data[new_beg_location as usize..new_end_location as usize].clone_from_slice(bytes);
             // save the new record's slot id
             let new_slotid = self.header.vec_of_records.len() - 1;
             // return the new slot id for the new record!
             return Some(new_slotid.try_into().unwrap());
         }
         // if no space for new record, return None
-        return None;
+        None
     }
 
     /// Return the bytes for the slotId. If the slotId is not valid then return None
@@ -154,7 +151,7 @@ impl Page {
             }
         }
         // if slot_id doesn't exist in vec of records then return none
-        return None;
+        None
     }
 
     /// Delete the bytes/slot for the slotId.
@@ -173,8 +170,7 @@ impl Page {
         };
         // if record is not already deleted, then delete it
         let deleted_record = &mut self.header.vec_of_records[slot_id as usize];
-        let deleted_record_beg_loc = deleted_record.beg_location.clone();
-        let deleted_record_end_loc = deleted_record.end_location.clone();
+        let deleted_record_beg_loc = deleted_record.beg_location;
         // indicate selected record has been deleted
         deleted_record.is_deleted = 1;
         // now fill in the gap caused by the deleted record by shifting all valid records
@@ -200,7 +196,7 @@ impl Page {
         for i in 0..self.header.vec_of_records.len() {
             let rec = &mut self.header.vec_of_records[i];
             // check if record is valid and was above the deleted record (regardless of its slot id)
-            if rec.is_deleted.clone() == 0 && rec.beg_location.clone() < deleted_record_beg_loc {
+            if rec.is_deleted == 0 && rec.beg_location < deleted_record_beg_loc {
                 // updated bool to indicate slot was eventually deleted
                 was_deleted = true;
                 // now shift the actual data for that record in the page down, too
@@ -221,8 +217,6 @@ impl Page {
         // first deserialize all of the fixed-length data I have in my header
         let deserialized_ptr_to_end_of_free_space =
             u16::from_le_bytes(data[0..2].try_into().unwrap());
-        let deserialized_ptr_to_beg_of_free_space =
-            u16::from_le_bytes(data[2..4].try_into().unwrap());
 
         let deserialized_pageID = u16::from_le_bytes(data[4..6].try_into().unwrap());
         // now extract the records from vector of bytes
@@ -245,22 +239,20 @@ impl Page {
             vec_of_records: deserialized_vec_of_records,
         };
         // create the deserialized page
-        let deserializedPage = Page {
+        Page {
             data: dataForDeserializedPage,
             header: deserializedHeader,
-        };
-        // return deserialized page
-        deserializedPage
+        }
     }
 
     /// Convert a page into bytes.
     pub fn get_bytes(&self) -> Vec<u8> {
         // serialize the fixed-length elements of the header
-        let mut serialized_ptr_to_end_of_free_space =
+        let serialized_ptr_to_end_of_free_space =
             self.header.ptr_to_end_of_free_space.to_le_bytes();
-        let mut serialized_ptr_to_beg_of_free_space =
+        let serialized_ptr_to_beg_of_free_space =
             self.header.ptr_to_beg_of_free_space.to_le_bytes();
-        let mut serialized_PageID = self.header.PageID.to_le_bytes();
+        let serialized_PageID = self.header.PageID.to_le_bytes();
         // clone the fixed-length elements into my final vector
         let mut final_vec = [0; PAGE_SIZE];
         final_vec[0..2].clone_from_slice(&serialized_ptr_to_end_of_free_space);
@@ -270,20 +262,18 @@ impl Page {
         // it into the final vector
         let mut count = 6;
         for i in 0..self.header.vec_of_records.len() {
-            let mut serialized_beg_location =
-                self.header.vec_of_records[i].beg_location.to_le_bytes();
-            let mut serialized_end_location =
-                self.header.vec_of_records[i].end_location.to_le_bytes();
-            let mut serialized_is_deleted = self.header.vec_of_records[i].is_deleted;
+            let serialized_beg_location = self.header.vec_of_records[i].beg_location.to_le_bytes();
+            let serialized_end_location = self.header.vec_of_records[i].end_location.to_le_bytes();
+            let serialized_is_deleted = self.header.vec_of_records[i].is_deleted;
             final_vec[count..count + 2].clone_from_slice(&serialized_beg_location);
             final_vec[count + 2..count + 4].clone_from_slice(&serialized_end_location);
             final_vec[count + 4] = serialized_is_deleted;
             count += 5;
         }
         // now clone in the rest of the actual page data starting from the end of the page's free space
-        let mut page_data = &self.data[self.header.ptr_to_end_of_free_space as usize..PAGE_SIZE];
+        let page_data = &self.data[self.header.ptr_to_end_of_free_space as usize..PAGE_SIZE];
         final_vec[self.header.ptr_to_end_of_free_space as usize..PAGE_SIZE]
-            .clone_from_slice(&page_data);
+            .clone_from_slice(page_data);
         // return final vector
         final_vec.to_vec()
     }
@@ -292,16 +282,13 @@ impl Page {
     /// when serialized/to_bytes.
     #[allow(dead_code)]
     pub(crate) fn get_header_size(&self) -> usize {
-        let headerSize = 6 + 5 * self.header.vec_of_records.len();
-        headerSize
+        6 + 5 * self.header.vec_of_records.len()
     }
     /// A utility function to determine the largest block of free space in the page.
     /// Will be used by tests. Optional for you to use in your code
     #[allow(dead_code)]
     pub(crate) fn get_largest_free_contiguous_space(&self) -> usize {
-        let maxContigSpaceRecords =
-            self.header.ptr_to_end_of_free_space as usize - self.get_header_size();
-        maxContigSpaceRecords
+        self.header.ptr_to_end_of_free_space as usize - self.get_header_size()
     }
 
     /// Utility function that returns a deserialized vector of records (extracted from header)
@@ -309,13 +296,13 @@ impl Page {
         // create a vector of records to fill
         let mut deserialized_vec_of_records = Vec::new();
         // deserialize components in the header
-        let deserialized_ptr_to_end_of_free_space =
+        let _deserialized_ptr_to_end_of_free_space =
             u16::from_le_bytes(data[0..2].try_into().unwrap());
         let deserialized_ptr_to_beg_of_free_space =
             u16::from_le_bytes(data[2..4].try_into().unwrap());
-        let deserialized_pageID = u16::from_le_bytes(data[4..6].try_into().unwrap());
+        let _deserialized_pageID = u16::from_le_bytes(data[4..6].try_into().unwrap());
         // iterate through remainder of header and deserialize components in the vector of records
-        let mut byte = 6 as usize;
+        let mut byte = 6;
 
         while byte <= (deserialized_ptr_to_beg_of_free_space - 5) as usize {
             let deserialized_beg_location =
@@ -398,15 +385,13 @@ impl Iterator for PageIter {
             }
         }
         // now, check if I still have enough valid records to return based on "index"
-        //println!("Page: # of records: {}", valid_records.len() - 1);
         if valid_records.is_empty() {
             // println!("page: no valid records");
             return None;
         }
         if self.index > valid_records.len() - 1 {
             // if I'm out of valid records, return 'None'
-            //println!("PAGE: out of records: {}", self.index);
-            return None;
+            None
         } else {
             // else, save my valid slotid picked at index
             let valid_slotid = valid_records[self.index];
@@ -418,8 +403,7 @@ impl Iterator for PageIter {
             // increment my index for the next "iter"
             self.index += 1;
             // return my valid slotid
-            // println!("page: value: {:?}", result.clone());
-            return Some(result);
+            Some(result)
         }
     }
 }

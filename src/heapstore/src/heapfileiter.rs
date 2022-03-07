@@ -1,7 +1,6 @@
 use crate::page::PageIter;
 use crate::{heapfile::HeapFile, page::Page};
-use common::ids::{ContainerId, PageId, TransactionId};
-use core::num;
+use common::ids::{ContainerId, TransactionId};
 use std::sync::Arc;
 
 #[allow(dead_code)]
@@ -32,16 +31,14 @@ impl HeapFileIterator {
             index: 0,
         };
         // just need to create a new heapfile-iter here and return it...
-        let new_HeapFileIter = HeapFileIterator {
+        HeapFileIterator {
             heapfile: hf,
-            container_id: container_id,
+            container_id,
             transaction_id: tid,
             page_index: 0,
             slot_index: 0,
             p_iter: new_p_iter,
-            //slot_index: 0,
-        };
-        new_HeapFileIter
+        }
     }
 }
 
@@ -50,36 +47,7 @@ impl HeapFileIterator {
 impl Iterator for HeapFileIterator {
     type Item = Vec<u8>;
     fn next(&mut self) -> Option<Self::Item> {
-        ////////////////// --- alternative method --- ////////////////
-        let num_pages = self.heapfile.num_pages();
-        if self.page_index >= num_pages {
-            None
-        } else {
-            let p = match self
-                .heapfile
-                .read_page_from_file(self.page_index.try_into().unwrap())
-            {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let num_slots = p.header.vec_of_records.len().clone() as u16;
-            let mut iter = p.into_iter();
-            if self.slot_index < num_slots {
-                if self.slot_index > 0 {
-                    for _ in 0..self.slot_index {
-                        iter.next();
-                    }
-                }
-                self.slot_index += 1;
-                return iter.next();
-            } else {
-                self.slot_index = 0;
-                self.page_index += 1;
-                return self.next();
-            }
-        }
-        ////////////////// --- alternative method --- ////////////////
-        /*// open heapfile
+        // open heapfile
         let hf = &self.heapfile;
         let num_pages = hf.num_pages();
         println!("in heapfileiter: num pages {}", num_pages);
@@ -114,6 +82,6 @@ impl Iterator for HeapFileIterator {
             self.p_iter.index = 0;
             return self.next();
         }
-        return next_val;*/
+        next_val
     }
 }
