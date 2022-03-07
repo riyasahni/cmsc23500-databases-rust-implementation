@@ -22,12 +22,11 @@ impl JoinPredicate {
     /// * `left_index` - Index of the field to compare in the left tuple.
     /// * `right_index` - Index of the field to compare in the right tuple.
     fn new(op: SimplePredicateOp, left_index: usize, right_index: usize) -> Self {
-        let new_join_predicate = JoinPredicate {
+        JoinPredicate {
             op: op,
             left_index: left_index,
             right_index: right_index,
-        };
-        new_join_predicate
+        }
     }
 }
 
@@ -81,7 +80,7 @@ impl Join {
         let left_schema = left_child.get_schema();
         let new_schema = TableSchema::merge(&right_schema, &left_schema);
         // create new join struct
-        let new_join = Join {
+        Join {
             predicate: join_predicate,
             left_child,
             left_index,
@@ -91,9 +90,7 @@ impl Join {
             is_open: false,
             is_beg: true,
             lc_saved: Some(Tuple::new(Vec::new())),
-        };
-        // return new join struct
-        new_join
+        }
     }
 }
 
@@ -105,7 +102,6 @@ impl OpIterator for Join {
         // open join itself
         self.is_open = true;
         Ok(())
-        // self.open()
     }
 
     /// Calculates the next tuple for a nested loop join.
@@ -113,22 +109,19 @@ impl OpIterator for Join {
         if !self.is_open {
             panic!("Open OpIterator!")
         }
-        //  let mut lt = self.left_child.next().unwrap();
         let mut rt = self.right_child.next().unwrap();
 
         if self.is_beg {
-            println!("initialize left child's saved val");
             self.lc_saved = self.left_child.next().unwrap().clone();
             self.is_beg = false;
         }
 
         match rt {
             Some(r_tup) => {
-                println!("Some right child next exists");
+                //    println!("Some right child next exists");
                 let l = self.lc_saved.clone();
                 match l {
                     Some(l) => {
-                        println!("Some right child next exists");
                         // check tuple's predicate and see if tuple should be joined or not
                         let r_field = Tuple::get_field(&r_tup, self.right_index).unwrap();
                         let l_field = Tuple::get_field(&l, self.left_index).unwrap();
@@ -139,7 +132,7 @@ impl OpIterator for Join {
                             // self.lc_saved = Some(l);
                             return Ok(Some(tup));
                         } else {
-                            println!("getting here");
+                            // println!("getting here");
                             self.next()
                         }
                     }

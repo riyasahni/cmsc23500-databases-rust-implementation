@@ -242,24 +242,24 @@ impl StorageTrait for StorageManager {
         // find the heapfile associated with container_id that's stored in ValueID
         let num_pgs = self.get_num_pages(container_id);
         let containers_unlock = self.containers.write().unwrap();
-        println!("in deleted value: inside delete_value");
+        // println!("in deleted value: inside delete_value");
         if containers_unlock.contains_key(&container_id) {
-            println!("in deleted value: heapfile exists for given container id");
+            // println!("in deleted value: heapfile exists for given container id");
             // extract heapfile's file path from hashmap
             let hf = containers_unlock.get(&container_id).unwrap();
             // check if page with given page id exists & extract
             if page_id < num_pgs {
-                println!(
+                /*println!(
                     "in deleted value: page with given page id exists: {}",
                     page_id
-                );
+                );*/
                 // extract page with given page_id
                 let mut extracted_page = HeapFile::read_page_from_file(&hf, page_id).unwrap();
                 // check if slot_id exists in page
                 let num_valid_records = Page::return_num_of_valid_records(&mut extracted_page);
 
                 if num_valid_records == 0 {
-                    println!("in deleted value: no records on page");
+                    //     println!("in deleted value: no records on page");
                     return Ok(());
                 }
                 if slot_id < num_valid_records {
@@ -267,7 +267,7 @@ impl StorageTrait for StorageManager {
                     let page_record = &extracted_page.header.vec_of_records[slot_id as usize];
                     // check if page_record is valid (not deleted)
                     if page_record.is_deleted == 0 {
-                        println!("in deleted value: record to delete is valid: {}", slot_id);
+                        //   println!("in deleted value: record to delete is valid: {}", slot_id);
                         // delete_value() on page for given slot_id if the corresponding record exists
                         Page::delete_value(&mut extracted_page, slot_id);
                         // write page to file

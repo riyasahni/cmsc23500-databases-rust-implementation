@@ -50,7 +50,7 @@ impl Iterator for HeapFileIterator {
         // open heapfile
         let hf = &self.heapfile;
         let num_pages = hf.num_pages();
-        println!("in heapfileiter: num pages {}", num_pages);
+        //  println!("in heapfileiter: num pages {}", num_pages);
 
         // iterate through pages in heapfile
         if self.page_index as u16 >= num_pages {
@@ -63,16 +63,16 @@ impl Iterator for HeapFileIterator {
         if next_val.is_none() {
             // move to next page
             self.page_index += 1;
-            println!(
+            /*println!(
                 "in heapfileiter: moving to the next page {}",
                 self.page_index
-            );
+            );*/
             if self.page_index as u16 >= num_pages {
                 // if there are no pages in heapfile, return none
-                println!(
+                /*println!(
                     "in heapfileiter: we're out of pages. page_index: {}, num_pages: {}",
                     self.page_index, num_pages
-                );
+                );*/
                 return None;
             }
             // extract the new page
