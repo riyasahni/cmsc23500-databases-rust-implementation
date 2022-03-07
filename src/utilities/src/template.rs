@@ -120,7 +120,7 @@ impl Template {
     }
 
     pub fn run_commands(&mut self) {
-        //println!("# commands to run: {:?}", self.commands);
+        println!("# commands to run: {:?}", self.commands);
         for command in self.commands.iter() {
             println!("Running command: {:?}", command);
             self.server.run_command(command);
@@ -128,7 +128,7 @@ impl Template {
     }
 
     pub fn run_cleanup(&mut self) {
-        // println!("rust_cleanup...");
+        println!("rust_cleanup...");
         for command in self.cleanup.iter() {
             println!("Running command: {:?}", command);
             self.server.run_command(command);
@@ -136,7 +136,7 @@ impl Template {
         // send reset command
         self.server.cleanup();
         self.server.close_client();
-        // println!("rust_cleanup...OK");
+        println!("rust_cleanup...OK");
     }
 
     pub fn reset(&mut self) -> &mut Self {
