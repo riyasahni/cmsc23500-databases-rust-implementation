@@ -4,7 +4,7 @@ use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::vec;
 
-/// Contains the index of the field to aggregate and the operator to apply to the column of each group. (You can add any other fields that you think are neccessary)
+/// Contains the index of the field to aggregate and the operator to apply to the column of each group.
 #[derive(Clone)]
 pub struct AggregateField {
     /// Index of field being aggregated.
@@ -13,7 +13,7 @@ pub struct AggregateField {
     pub op: AggOp,
 }
 
-/// Computes an aggregation function over multiple columns and grouped by multiple fields. (You can add any other fields that you think are neccessary)
+/// Computes an aggregation function over multiple columns and grouped by multiple fields.
 struct Aggregator {
     /// Aggregated fields.
     agg_fields: Vec<AggregateField>,
@@ -27,12 +27,6 @@ struct Aggregator {
 
 impl Aggregator {
     /// Aggregator constructor.
-    ///
-    /// # Arguments
-    ///
-    /// * `agg_fields` - List of `AggregateField`s to aggregate over. `AggregateField`s contains the aggregation function and the field to aggregate over.
-    /// * `groupby_fields` - Indices of the fields to groupby over.
-    /// * `schema` - TableSchema of the form [groupby_field attributes ..., agg_field attributes ...]).
     fn new(
         agg_fields: Vec<AggregateField>,
         groupby_fields: Vec<usize>,
@@ -45,18 +39,9 @@ impl Aggregator {
             hm_groupby_aggops: HashMap::new(),
         };
         new_aggregator
-        // panic!("TODO milestone op");
     }
 
     /// Handles the creation of groups for aggregation.
-    ///
-    /// If a group exists, then merge the tuple into the group's accumulated value.
-    /// Otherwise, create a new group aggregate result.
-    ///
-    /// # Arguments
-
-    /// * `tuple` - Tuple to add to a group.
-
     pub fn merge_tuple_into_group(&mut self, tuple: &Tuple) {
         // extract the groupby_fields from the given tuple (these are primary key fields)
         let mut vec_primary_key = Vec::new();
@@ -276,15 +261,6 @@ pub struct Aggregate {
 
 impl Aggregate {
     /// Aggregate constructor.
-    ///
-    /// # Arguments
-    ///
-    /// * `groupby_indices` - the indices of the group by fields
-    /// * `groupby_names` - the names of the group_by fields in the final aggregation
-    /// * `agg_indices` - the indices of the aggregate fields
-    /// * `agg_names` - the names of the aggreagte fields in the final aggregation
-    /// * `ops` - Aggregate operations, 1:1 correspondence with the indices in agg_indices
-    /// * `child` - child operator to get the input data from.
     pub fn new(
         groupby_indices: Vec<usize>,
         groupby_names: Vec<&str>,
@@ -409,17 +385,12 @@ impl OpIterator for Aggregate {
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
         //resets the state
-        // filter runs through an array of 70 tuples
-        // filter operator returns "next" for each eleent in the 70
-        // now we cant filter to start from beginnig and start iterating from the
-        // beginning tuple
         if !self.open {
             panic!("Operator has not been opened")
         }
         self.child.rewind()?;
         self.child.close()?;
         self.open()
-        //  panic!("TODO milestone op");
     }
 
     fn get_schema(&self) -> &TableSchema {
