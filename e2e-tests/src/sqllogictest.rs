@@ -7,23 +7,20 @@ mod test {
     const E2E_DIR: &str = "e2e-tests";
     #[test]
     fn run_sql_logic_tests() {
-        println!("in run_sql_logic_tests 1");
         let test_dir = if std::env::current_dir().unwrap().ends_with(E2E_DIR) {
-            println!("in run_sql_logic_tests 2 (new test_dir");
             Path::new("testdata").to_path_buf()
         } else {
-            println!("in run_sql_logic_tests 2 (existing test_dir");
             Path::new(E2E_DIR).join("testdata")
         };
         assert!(test_dir.exists());
         for entry in fs::read_dir(test_dir).unwrap() {
-            println!("in run_sql_logic_tests 3 (for loop");
             let path = entry.unwrap().path();
             assert!(path.exists());
             println!(" *** Running Test {:?} ***", path);
             run_sqllogictests_in_file(&path).unwrap();
         }
     }
+
 
     #[test]
     fn run_sql_join() {
