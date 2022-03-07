@@ -62,12 +62,12 @@ impl Optimizer {
                 left_table,
                 right_table,
             }) => Ok(PhysicalOp::HashJoin(PhysicalHashJoinNode {
+                hash_table_key: left.clone(),
                 left,
                 right,
                 op,
                 left_table,
                 right_table,
-                hash_table_key: left.clone(),
                 hash_table_state_id: 0,
             })),
 
