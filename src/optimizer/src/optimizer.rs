@@ -61,13 +61,23 @@ impl Optimizer {
                 op,
                 left_table,
                 right_table,
-            }) => Ok(PhysicalOp::NestedLoopJoin(PhysicalNestedLoopJoinNode {
+            }) => Ok(PhysicalOp::HashJoin(PhysicalHashJoinNode {
                 left,
                 right,
                 op,
                 left_table,
                 right_table,
+                hash_table_key: left.clone(),
+                hash_table_state_id: 0,
             })),
+
+            /*Ok(PhysicalOp::NestedLoopJoin(PhysicalNestedLoopJoinNode {
+                left,
+                right,
+                op,
+                left_table,
+                right_table,
+            })),*/
             LogicalOp::Filter(FilterNode { table, predicate }) => {
                 Ok(PhysicalOp::Filter(PhysicalFilterNode { table, predicate }))
             }
