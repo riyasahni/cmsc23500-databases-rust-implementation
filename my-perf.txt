@@ -1,0 +1,13 @@
+For this Milestone, I really only had to make one change in the optimizer.rs
+file, which was to change the LogicalJoin to use a HashJoin rather than a 
+nested loop join. This makes sense, because a nested loop join is clearly not as 
+efficient as a Hashjoin, because it runs N*M times, assuming the outer loop executes
+N times and the inner loop executes M times. However, a HashJoin has a O(M+N) time 
+complexity, which is significantly better! That was the only change I had to make,
+because I assume my Page Milestone implementation was efficient already. 
+
+I spent roughly 15 hours on this Milestone, because the hardest part for me was debugging.
+I had no idea how to decipher the Backtrace, and at one point Tapan thought it might actually
+be a problem with my machine! I liked the simplicity and straight-forwardness of this Milestone.
+I strongly disliked having to debug for many hours on end, without much idea for what was causing
+my bug. I suggest making the Gradescope outputs available to students in the future.
