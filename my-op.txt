@@ -1,2 +1,22 @@
 For my QO Milestone, for the Hashjoin function, I created a Hashmap with a nested hashmap, 
-that maps the field to a hashmap of the 
+that maps the field to a hashmap of a tuple and the tuple's index, where the index is the key
+and the value is the tuple. I decided to choose this implementation over creating a hashmap
+that maps a field to a vector of tuples, because I thought that having a nested hashmap would be
+more efficient than having to iterate through a vector of tuples. My implementation for the
+nested loop join is pretty straight forward. I just check if the right most tuple exists and 
+then check the tuple's predicate to see if tuple should be joined or not. If some next right 
+child does not exist, then I just rewind and check the left tuple's predicate and see if the tuple
+should be joined or not. For my Aggregator, in my merge_tuple function, I calculate every Aggregator
+operation on every field and store it in a vector (i.e. I calculate the sum, count, min and max for
+every element in the row). Then, in iterator, based on what the given aggop is, I just find the
+pre-calculated result for that element in the row, extract it from my vector, and return it. For the
+'Average' aggop, I just use sum and count to calculated by: avg = sum/count. I wasn't actually sure if
+this was an efficient implementation, but I chose to do this because I figured it would make my code easier
+to write and it would be easier for me to write out Iterator.
+
+Overall, I spent around 30 hours writing out the QO Milestone, and an additional ~15 hours debugging. I liked
+this Milestone more than the last one (HS Milestone) because I think there was more documentation given for this
+one, and I had a better understanding of what to do earlier on. I did not like debugging this project. It's taken
+me an extremely long time to debug the e2e tests, because I'm not sure how to interpret the Backtrace results, and
+I cannot see the output on Gradescope. It would pass locally for me, but then fail on Gradescope, which would be
+super annoying.

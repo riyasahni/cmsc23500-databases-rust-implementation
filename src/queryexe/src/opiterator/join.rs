@@ -3,7 +3,7 @@ use common::{CrustyError, Field, SimplePredicateOp, TableSchema, Tuple};
 use sqlparser::dialect::keywords::NO;
 use std::collections::HashMap;
 
-/// Compares the fields of two tuples using a predicate. (You can add any other fields that you think are neccessary)
+/// Compares the fields of two tuples using a predicate.
 pub struct JoinPredicate {
     /// Operation to comapre the fields with.
     op: SimplePredicateOp,
@@ -15,12 +15,6 @@ pub struct JoinPredicate {
 
 impl JoinPredicate {
     /// Constructor that determines if two tuples satisfy the join condition.
-    ///
-    /// # Arguments
-    ///
-    /// * `op` - Operation to compare the two fields with.
-    /// * `left_index` - Index of the field to compare in the left tuple.
-    /// * `right_index` - Index of the field to compare in the right tuple.
     fn new(op: SimplePredicateOp, left_index: usize, right_index: usize) -> Self {
         JoinPredicate {
             op: op,
@@ -30,7 +24,7 @@ impl JoinPredicate {
     }
 }
 
-/// Nested loop join implementation. (You can add any other fields that you think are neccessary)
+/// Nested loop join implementation.
 pub struct Join {
     /// Join condition.
     predicate: JoinPredicate,
@@ -54,14 +48,6 @@ pub struct Join {
 
 impl Join {
     /// Join constructor. Creates a new node for a nested-loop join.
-    ///
-    /// # Arguments
-    ///
-    /// * `op` - Operation in join condition.
-    /// * `left_index` - Index of the left field in join condition.
-    /// * `right_index` - Index of the right field in join condition.
-    /// * `left_child` - Left child of join operator.
-    /// * `right_child` - Left child of join operator.
     pub fn new(
         op: SimplePredicateOp,
         left_index: usize,
@@ -118,7 +104,7 @@ impl OpIterator for Join {
 
         match rt {
             Some(r_tup) => {
-                //    println!("Some right child next exists");
+                // Some right child next exists
                 let l = self.lc_saved.clone();
                 match l {
                     Some(l) => {
@@ -129,10 +115,8 @@ impl OpIterator for Join {
 
                         if check {
                             let tup = l.merge(&r_tup);
-                            // self.lc_saved = Some(l);
                             return Ok(Some(tup));
                         } else {
-                            // println!("getting here");
                             self.next()
                         }
                     }
@@ -217,14 +201,6 @@ pub struct HashEqJoin {
 }
 impl HashEqJoin {
     /// Constructor for a hash equi-join operator.
-    ///
-    /// # Arguments
-    ///
-    /// * `op` - Operation in join condition.
-    /// * `left_index` - Index of the left field in join condition.
-    /// * `right_index` - Index of the right field in join condition.
-    /// * `left_child` - Left child of join operator.
-    /// * `right_child` - Left child of join operator.
     #[allow(dead_code)]
     pub fn new(
         op: SimplePredicateOp,
