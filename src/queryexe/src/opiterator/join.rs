@@ -302,7 +302,7 @@ impl OpIterator for HashEqJoin {
                     let left_val = &inner_hashmap[&self.hashmap_index];
                     let merged_val = left_val.merge(&right_val_new);
                     self.hashmap_index += 1;
-                    if self.hashmap_index == inner_hashmap.keys().len() {
+                    if self.hashmap_index == inner_hashmap.keys().len() - 1 {
                         self.hashmap_index = 0;
                         self.right_stay = false;
                     } else {
