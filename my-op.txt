@@ -20,3 +20,8 @@ one, and I had a better understanding of what to do earlier on. I did not like d
 me an extremely long time to debug the e2e tests, because I'm not sure how to interpret the Backtrace results, and
 I cannot see the output on Gradescope. It would pass locally for me, but then fail on Gradescope, which would be
 super annoying.
+
+I'm still unable to pass my e2e tests, but I think that I am extremely close to the correct solution. It looks
+like my program crashes somewhere, but I have not been able to locate where exactly that is. I notice that 
+I'm sometimes not returning the right number of query results. This confuses me, because all my tests pass in
+every other Milestone, including the Perf Milestone. 

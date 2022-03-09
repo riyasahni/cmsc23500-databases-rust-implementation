@@ -28,13 +28,9 @@ impl JoinPredicate {
 pub struct Join {
     /// Join condition.
     predicate: JoinPredicate,
-    /// Left child node.
     left_child: Box<dyn OpIterator>,
-    /// Left index
     left_index: usize,
-    /// Right child node.
     right_child: Box<dyn OpIterator>,
-    /// Right index
     right_index: usize,
     /// Schema of the result.
     schema: TableSchema,
@@ -171,9 +167,8 @@ impl OpIterator for Join {
         self.right_child.rewind()?;
         self.left_child.rewind()?;
         self.close()?;
-        self.open();
+        self.open()?;
         Ok(())
-        // reopen the iterator?
     }
 
     /// return schema of the result
@@ -182,7 +177,7 @@ impl OpIterator for Join {
     }
 }
 
-/// Hash equi-join implementation. (You can add any other fields that you think are neccessary)
+/// Hash equi-join implementation.
 pub struct HashEqJoin {
     predicate: JoinPredicate,
     left_index: usize,
@@ -278,7 +273,7 @@ impl OpIterator for HashEqJoin {
                     let left_val = &inner_hashmap[&self.hashmap_index];
                     let merged_val = left_val.merge(&right_val_new);
                     self.hashmap_index += 1;
-                    if self.hashmap_index == inner_hashmap.keys().len() - 1 {
+                    if self.hashmap_index == inner_hashmap.keys().len() {
                         self.hashmap_index = 0;
                         self.right_stay = false;
                     } else {

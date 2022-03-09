@@ -130,7 +130,6 @@ impl Aggregator {
             let mut vec_of_fields = Vec::new();
             // iterate through the agg_fields and for each agg field get its corresponding
             // index to locate where it is in the row
-
             for mut i in 0..self.agg_fields.len() {
                 let mut agg_field_computations = Vec::new();
 
@@ -152,7 +151,6 @@ impl Aggregator {
                 agg_field_computations.push(max_val.clone());
 
                 // push the newly created vector into overal vector
-
                 vec_of_fields.push(agg_field_computations);
             }
             // push new key-value pair into hashmap. Key is the group-by field
@@ -162,7 +160,6 @@ impl Aggregator {
     }
 
     /// Returns a `TupleIterator` over the results.
-    ///
     /// Resulting tuples must be of the form: (group by fields ..., aggregate fields ...)
     pub fn iterator(&self) -> TupleIterator {
         // extract the vec of agg_fields and corresponding agg_op
@@ -185,7 +182,6 @@ impl Aggregator {
 
                 // find out which agg_op I want to conduct on this agg field and extract the
                 // corresponding field from vec of agg_ops
-
                 match agg_field_operation {
                     AggOp::Avg => {
                         // avg = sum/count, so calculate sum and count, then divide.
@@ -201,26 +197,21 @@ impl Aggregator {
                     AggOp::Count => {
                         // extract & unwrap the first field in vec to get "count" agg_op result
                         let agg_op_value = &calcs_for_ith_agg_field[0];
-                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
                         agg_op_values.push(agg_op_value.clone());
                     }
                     AggOp::Max => {
                         // extract & unwrap the fourth field in vec to get "max" agg_op result
                         let agg_op_value = &calcs_for_ith_agg_field[3];
-                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
                         agg_op_values.push(agg_op_value.clone());
                     }
                     AggOp::Min => {
                         // extract & unwrap the third field in vec to get "min" agg_op result
                         let agg_op_value = &calcs_for_ith_agg_field[2];
-                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
                         agg_op_values.push(agg_op_value.clone());
                     }
                     AggOp::Sum => {
                         // extract & unwrap the second field in vec to get "sum" agg_op result
                         let agg_op_value = &calcs_for_ith_agg_field[1];
-
-                        // turn agg_op_value into a Field and push into vector of fields of agg_op_values
                         agg_op_values.push(agg_op_value.clone());
                     }
                     _ => panic!("invalid aggregate operation!"),
@@ -235,7 +226,6 @@ impl Aggregator {
             vec_to_iterate.push(merged_tuple);
         }
         // create the tuple-iterator and call it on the schema
-        println!("Iterator: vec_to_iterate: {:?}", vec_to_iterate);
         let new_tupleiterator = TupleIterator::new(vec_to_iterate, self.schema.clone());
         return new_tupleiterator;
     }
@@ -279,12 +269,10 @@ impl Aggregate {
                 field: aggfield_index,
                 op: aggfield_op,
             };
-            println!("Aggregate new() -- new_AggField index: {}", new_AggField.op);
             vec_AggFields.push(new_AggField);
         }
 
         // create a Vec<Attribute> that I can later use to create the schema
-
         let child_schema: TableSchema = child.get_schema().clone();
         let mut groupby_field_and_agg_field_attributes = Vec::new();
 
@@ -390,7 +378,8 @@ impl OpIterator for Aggregate {
         }
         self.child.rewind()?;
         self.child.close()?;
-        self.open()
+        self.open()?;
+        Ok(())
     }
 
     fn get_schema(&self) -> &TableSchema {
